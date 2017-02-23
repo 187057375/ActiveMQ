@@ -3,19 +3,16 @@ package com.sdu.activemq.network.client;
 import com.sdu.activemq.network.utils.NettyUtils;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * @author hanhan.zhang
  * */
 public class NettyClient {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(NettyClient.class);
 
     private EventLoopGroup eventLoopGroup;
 
@@ -26,6 +23,8 @@ public class NettyClient {
     private InetSocketAddress localSocketAddress;
 
     private InetSocketAddress remoteSocketAddress;
+
+    private AtomicBoolean start = new AtomicBoolean(false);
 
     public NettyClient(NettyClientConfig config) {
         this.config = config;
@@ -49,10 +48,10 @@ public class NettyClient {
         channelFuture.addListeners(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
+                start.set(true);
                 channel = future.channel();
                 localSocketAddress = (InetSocketAddress) channel.localAddress();
                 remoteSocketAddress = (InetSocketAddress) channel.remoteAddress();
-                LOGGER.info("connect remote address : {}", remoteSocketAddress);
             }
         });
     }
@@ -69,7 +68,12 @@ public class NettyClient {
         return channel.writeAndFlush(object);
     }
 
+    public boolean isStarted() {
+        return start.get();
+    }
+
     public void stop(int await, TimeUnit unit) throws InterruptedException {
+        start.set(false);
         if (channel != null) {
             channel.closeFuture().sync();
         }

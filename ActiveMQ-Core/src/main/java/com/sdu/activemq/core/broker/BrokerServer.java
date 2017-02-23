@@ -22,7 +22,6 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.*;
 
 import static com.sdu.activemq.utils.Const.ZK_BROKER_PATH;
@@ -65,7 +64,7 @@ public class BrokerServer implements Server {
     private void doStartServer(MessageObjectDecoder decoder, MessageObjectEncoder encoder) throws Exception {
         // 工作线程
         int poolSize = brokerConfig.getBrokerWorkerThreads();
-        int queueSize = brokerConfig.getBrokerMQQueusSize();
+        int queueSize = brokerConfig.getBrokerMQQueueSize();
         BlockingQueue<Runnable> queue;
         if (queueSize == 0) {
             queue = new LinkedBlockingQueue<>();

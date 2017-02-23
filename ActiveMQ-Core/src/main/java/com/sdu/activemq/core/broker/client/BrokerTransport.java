@@ -25,6 +25,7 @@ import static com.sdu.activemq.model.MQMsgSource.ActiveMQCluster;
 import static com.sdu.activemq.model.MQMsgType.ActiveMQHeatBeat;
 
 /**
+ * Broker Server服务客户端
  *
  * @author hanhan.zhang
  * */
@@ -32,13 +33,16 @@ public class BrokerTransport {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BrokerTransport.class);
 
-    public static final String BROKER_MESSAGE_SYNC_SOCKET_THREADS = "broker.message.sync.socket.threads";
+    // Broker Server客户端Socket IO线程数
+    private static final String BROKER_TRANSPORT_SOCKET_THREADS = "broker.transport.socket.threads";
 
-    public static final String BROKER_MESSAGE_SYNC_SOCKET_SND_BUF = "broker.message.sync.socket.snd.buf";
+    // Broker Server客户端Socket发送缓冲区
+    private static final String BROKER_TRANSPORT_SOCKET_SND_BUF = "broker.transport.socket.snd.buf";
 
-    public static final String BROKER_MESSAGE_SYNC_SOCKET_RCV_BUF = "broker.message.sync.socket.rcv.buf";
+    // Broker Server客户端Socket接收缓冲区
+    private static final String BROKER_TRANSPORT_SOCKET_RCV_BUF = "broker.transport.socket.rcv.buf";
 
-    public static final String BROKER_MESSAGE_SYNC_SOCKET_EPOOL = "broker.message.sync.socket.epoll";
+    private static final String BROKER_TRANSPORT_SOCKET_EPOOL = "broker.transport.socket.epoll";
 
     // MQ Broker服务地址
     private String brokerAddress;
@@ -61,15 +65,15 @@ public class BrokerTransport {
 
     private void doStart() {
         NettyClientConfig clientConfig = new NettyClientConfig();
-        clientConfig.setEPool(mqConfig.getBoolean(BROKER_MESSAGE_SYNC_SOCKET_EPOOL, false));
-        clientConfig.setSocketThreads(mqConfig.getInt(BROKER_MESSAGE_SYNC_SOCKET_THREADS, 10));
+        clientConfig.setEPool(mqConfig.getBoolean(BROKER_TRANSPORT_SOCKET_EPOOL, false));
+        clientConfig.setSocketThreads(mqConfig.getInt(BROKER_TRANSPORT_SOCKET_THREADS, 10));
         clientConfig.setClientThreadFactory(Utils.buildThreadFactory("message-sync-socket-thread-%d"));
         clientConfig.setRemoteAddress(brokerAddress);
 
         // Channel
         Map<ChannelOption, Object> options = Maps.newHashMap();
-        options.put(ChannelOption.SO_SNDBUF, mqConfig.getInt(BROKER_MESSAGE_SYNC_SOCKET_SND_BUF, 1024));
-        options.put(ChannelOption.SO_RCVBUF, mqConfig.getInt(BROKER_MESSAGE_SYNC_SOCKET_RCV_BUF, 1024));
+        options.put(ChannelOption.SO_SNDBUF, mqConfig.getInt(BROKER_TRANSPORT_SOCKET_SND_BUF, 1024));
+        options.put(ChannelOption.SO_RCVBUF, mqConfig.getInt(BROKER_TRANSPORT_SOCKET_RCV_BUF, 1024));
         options.put(ChannelOption.TCP_NODELAY, true);
         options.put(ChannelOption.SO_KEEPALIVE, false);
         clientConfig.setOptions(options);
@@ -89,6 +93,10 @@ public class BrokerTransport {
         // 创建Broker Server's Client并启动
         nettyClient = new NettyClient(clientConfig);
         nettyClient.start();
+
+        if (nettyClient.isStarted()) {
+            LOGGER.info("transport connect broker server[{}] success .", brokerAddress);
+        }
     }
 
     public void stop() {

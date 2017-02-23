@@ -6,27 +6,32 @@ import com.sdu.activemq.utils.Utils;
 import java.io.IOException;
 
 /**
+ * Broker Server配置
  *
+ * @author hanhan.zhang
  * */
 public class BrokerConfig {
 
-    public static final String BROKER_CLUSTER_HOST = "broker.cluster.host";
+    // Broker Server服务地址
+    private static final String BROKER_SERVER_HOST = "broker.server.host";
 
-    public static final String BROKER_CLUSTER_PORT = "broker.cluster.port";
+    // Broker Server绑定端口
+    private static final String BROKER_SERVER_PORT = "broker.server.port";
 
-    public static final String BROKER_SERVER_HOST = "broker.server.host";
+    // Broker Server Socket接收缓冲区
+    private static final String BROKER_SERVER_SOCKET_RCV_BUFFER = "broker.server.socket.rcv.buf";
 
-    public static final String BROKER_SERVER_PORT = "broker.server.port";
+    // Broker Server Socket发送缓冲区
+    private static final String BROKER_SERVER_SOCKET_SND_BUFFER = "broker.server.socket.snd.buf";
 
-    public static final String BROKER_SERVER_SOCKET_RCV_BUFFER = "broker.server.socket.rcv.buf";
+    // Broker Server Socket IO线程数[Netty WorkerBossGroup线程数]
+    private static final String BROKER_SERVER_SOCKET_IO_THREADS = "broker.server.socket.io.threads";
 
-    public static final String BROKER_SERVER_SOCKET_SND_BUFFER = "broker.server.socket.snd.buf";
+    // Broker Server业务线程数
+    private static final String BROKER_SERVER_MQ_WORKER_THREAD = "broker.server.mq.worker.threads";
 
-    public static final String BROKER_SERVER_SOCKET_IO_THREADS = "broker.server.socket.io.threads";
-
-    public static final String BROKER_SERVER_MQ_WORKER_THREAD = "broker.server.mq.worker.threads";
-
-    public static final String BROKER_SERVER_MQ_QUEUE_SIZE = "broker.server.mq.queue.size";
+    // Broker Server业务线程任务队列
+    private static final String BROKER_SERVER_MQ_QUEUE_SIZE = "broker.server.mq.queue.size";
 
     private MQConfig mqConfig;
 
@@ -63,7 +68,7 @@ public class BrokerConfig {
         return mqConfig.getInt(BROKER_SERVER_SOCKET_SND_BUFFER, 1024);
     }
 
-    public int getBrokerMQQueusSize() {
+    public int getBrokerMQQueueSize() {
         assert mqConfig != null;
         return mqConfig.getInt(BROKER_SERVER_MQ_QUEUE_SIZE, 0);
     }
@@ -71,16 +76,6 @@ public class BrokerConfig {
     public int getBrokerWorkerThreads() {
         assert mqConfig != null;
         return mqConfig.getInt(BROKER_SERVER_MQ_WORKER_THREAD, Runtime.getRuntime().availableProcessors() * 2);
-    }
-
-    public String getClusterHost() {
-        assert mqConfig != null;
-        return mqConfig.getString(BROKER_CLUSTER_HOST, "127.0.0.1");
-    }
-
-    public int getClusterPort() {
-        assert mqConfig != null;
-        return mqConfig.getInt(BROKER_CLUSTER_PORT, 0);
     }
 
 }

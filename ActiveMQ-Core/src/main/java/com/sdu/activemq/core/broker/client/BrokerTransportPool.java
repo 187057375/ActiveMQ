@@ -7,7 +7,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 每个MQ Server Broker有个连接池
+ * Broker Server客户端连接池
+ *
+ * Note:
+ *
+ *  每个Broker Server对应一个BrokerTransportPool
  *
  * @author hanhan.zhang
  * */
@@ -15,15 +19,15 @@ public class BrokerTransportPool extends GenericObjectPool<BrokerTransport> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BrokerTransportPool.class);
 
-    public static final String BROKER_CONNECT_MAX_ACTIVE = "broker.connect.max.active";
+    private static final String BROKER_CONNECT_MAX_ACTIVE = "broker.connect.max.active";
 
-    public static final String BROKER_CONNECT_MIN_IDLE = "broker.connect.min.idle";
+    private static final String BROKER_CONNECT_MIN_IDLE = "broker.connect.min.idle";
 
-    public static final String BROKER_CONNECT_MAX_IDLE = "broker.connect.max.idle";
+    private static final String BROKER_CONNECT_MAX_IDLE = "broker.connect.max.idle";
 
-    public static final String BROKER_CONNECT_MAX_AWAIT = "broker.connect.max.await";
+    private static final String BROKER_CONNECT_MAX_AWAIT = "broker.connect.max.await";
 
-    public static final String BROKER_CONNECT_SESSION_TIMEOUT = "broker.connect.session.timeout";
+    private static final String BROKER_CONNECT_SESSION_TIMEOUT = "broker.connect.session.timeout";
 
     private String brokerAddress;
 
