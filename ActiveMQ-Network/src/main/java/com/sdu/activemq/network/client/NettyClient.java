@@ -14,8 +14,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * */
 public class NettyClient {
 
+    // Netty Socket Thread管理组
     private EventLoopGroup eventLoopGroup;
 
+    // Netty NioSocketChannel
     private Channel channel;
 
     private NettyClientConfig config;
@@ -65,6 +67,9 @@ public class NettyClient {
     }
 
     public ChannelFuture writeAndFlush(Object object) {
+        if (!isStarted()) {
+            throw new IllegalStateException("client not started !");
+        }
         return channel.writeAndFlush(object);
     }
 

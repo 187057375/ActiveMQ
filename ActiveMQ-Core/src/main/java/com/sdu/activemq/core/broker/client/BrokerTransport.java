@@ -63,6 +63,9 @@ public class BrokerTransport {
         doStart();
     }
 
+    /**
+     * Broker Server创建客户端连接
+     * */
     private void doStart() {
         NettyClientConfig clientConfig = new NettyClientConfig();
         clientConfig.setEPool(mqConfig.getBoolean(BROKER_TRANSPORT_SOCKET_EPOOL, false));
@@ -97,6 +100,10 @@ public class BrokerTransport {
         if (nettyClient.isStarted()) {
             LOGGER.info("transport connect broker server[{}] success .", brokerAddress);
         }
+    }
+
+    public ChannelFuture writeAndFlush(Object msg) {
+        return nettyClient.writeAndFlush(msg);
     }
 
     public void stop() {
