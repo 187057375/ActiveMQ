@@ -5,8 +5,9 @@ package com.sdu.activemq.model;
  *
  * @author hanhan.zhang
  * */
-public enum MQMessageType {
+public enum MQMsgType {
 
+    ActiveMQHeatBeat(0),
     ActiveMQSubscribe(1),
     ActiveMQUnsubscribe(2),
     ActiveMQMessage(3),
@@ -15,7 +16,7 @@ public enum MQMessageType {
 
     int messageType;
 
-    MQMessageType(int type) {
+    MQMsgType(int type) {
         this.messageType = type;
     }
 

@@ -6,6 +6,7 @@ import io.netty.channel.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -18,9 +19,13 @@ public class NettyClient {
 
     private EventLoopGroup eventLoopGroup;
 
-    private ChannelFuture channelFuture;
+    private Channel channel;
 
     private NettyClientConfig config;
+
+    private InetSocketAddress localSocketAddress;
+
+    private InetSocketAddress remoteSocketAddress;
 
     public NettyClient(NettyClientConfig config) {
         this.config = config;
@@ -39,20 +44,34 @@ public class NettyClient {
             }
         }
 
-        channelFuture = bootstrap.connect(NettyUtils.getInetSocketAddress(config.getRemoteAddress()));
+        ChannelFuture channelFuture = bootstrap.connect(NettyUtils.getInetSocketAddress(config.getRemoteAddress()));
 
         channelFuture.addListeners(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
-                Channel channel = future.channel();
-                LOGGER.info("connect remote address : {}", channel.remoteAddress());
+                channel = future.channel();
+                localSocketAddress = (InetSocketAddress) channel.localAddress();
+                remoteSocketAddress = (InetSocketAddress) channel.remoteAddress();
+                LOGGER.info("connect remote address : {}", remoteSocketAddress);
             }
         });
     }
 
+    public InetSocketAddress getLocalSocketAddress() {
+        return localSocketAddress;
+    }
+
+    public InetSocketAddress getRemoteSocketAddress() {
+        return remoteSocketAddress;
+    }
+
+    public ChannelFuture writeAndFlush(Object object) {
+        return channel.writeAndFlush(object);
+    }
+
     public void stop(int await, TimeUnit unit) throws InterruptedException {
-        if (channelFuture != null) {
-            channelFuture.channel().closeFuture().sync();
+        if (channel != null) {
+            channel.closeFuture().sync();
         }
         if (eventLoopGroup != null) {
             eventLoopGroup.shutdownGracefully(await, await, unit);

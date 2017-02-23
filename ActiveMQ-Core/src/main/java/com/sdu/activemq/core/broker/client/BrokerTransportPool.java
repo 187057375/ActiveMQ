@@ -1,4 +1,4 @@
-package com.sdu.activemq.core.route;
+package com.sdu.activemq.core.broker.client;
 
 import com.sdu.activemq.core.MQConfig;
 import io.netty.channel.ChannelInboundHandler;
@@ -11,9 +11,9 @@ import org.slf4j.LoggerFactory;
  *
  * @author hanhan.zhang
  * */
-public class BrokerConnectPool extends GenericObjectPool<BrokerConnector> {
+public class BrokerTransportPool extends GenericObjectPool<BrokerTransport> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(BrokerConnectPool.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(BrokerTransportPool.class);
 
     public static final String BROKER_CONNECT_MAX_ACTIVE = "broker.connect.max.active";
 
@@ -25,21 +25,17 @@ public class BrokerConnectPool extends GenericObjectPool<BrokerConnector> {
 
     public static final String BROKER_CONNECT_SESSION_TIMEOUT = "broker.connect.session.timeout";
 
+    private String brokerAddress;
 
-    private MQConfig mqConfig;
+    public BrokerTransportPool(String brokerAddress, MQConfig mqConfig, ChannelInboundHandler channelHandler) {
+        this.brokerAddress = brokerAddress;
+        int maxActive = mqConfig.getInt(BROKER_CONNECT_MAX_ACTIVE, 10);
+        int minIdle = mqConfig.getInt(BROKER_CONNECT_MIN_IDLE, 5);
+        int maxIdle = mqConfig.getInt(BROKER_CONNECT_MAX_IDLE, 20);
+        int maxWait = mqConfig.getInt(BROKER_CONNECT_MAX_AWAIT, 1000);
+        int sessionTimeOut = mqConfig.getInt(BROKER_CONNECT_SESSION_TIMEOUT, 5000);
 
-    private ChannelInboundHandler channelHandler;
-
-    public BrokerConnectPool(String brokerAddress, MQConfig mqConfig, ChannelInboundHandler channelHandler) {
-        this.mqConfig = mqConfig;
-        this.channelHandler = channelHandler;
-        int maxActive = this.mqConfig.getInt(BROKER_CONNECT_MAX_ACTIVE, 10);
-        int minIdle = this.mqConfig.getInt(BROKER_CONNECT_MIN_IDLE, 5);
-        int maxIdle = this.mqConfig.getInt(BROKER_CONNECT_MAX_IDLE, 20);
-        int maxWait = this.mqConfig.getInt(BROKER_CONNECT_MAX_AWAIT, 1000);
-        int sessionTimeOut = this.mqConfig.getInt(BROKER_CONNECT_SESSION_TIMEOUT, 5000);
-
-        LOGGER.info("BrokerConnectPool[maxActive=%d,minIdle=%d,maxIdle=%d,maxWait=%d,sessionTimeOut=%d]", maxActive, minIdle, maxIdle, maxWait, sessionTimeOut);
+        LOGGER.info("BrokerTransportPool[maxActive=%d,minIdle=%d,maxIdle=%d,maxWait=%d,sessionTimeOut=%d]", maxActive, minIdle, maxIdle, maxWait, sessionTimeOut);
 
         this.setMaxActive(maxActive);
         this.setMaxIdle(maxIdle);
@@ -52,7 +48,11 @@ public class BrokerConnectPool extends GenericObjectPool<BrokerConnector> {
         this.setMinEvictableIdleTimeMillis(30 * 60 * 1000);
         this.setTestWhileIdle(true);
 
-        this.setFactory(new BrokerConnectObjectPoolFactory(brokerAddress, mqConfig, channelHandler));
+        this.setFactory(new TransportPoolFactory(brokerAddress, mqConfig, channelHandler));
+    }
+
+    public String getBrokerAddress() {
+        return brokerAddress;
     }
 
     public void destroy() throws Exception {

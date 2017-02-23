@@ -17,12 +17,16 @@ import lombok.Setter;
 @NoArgsConstructor
 public class MQMessage {
 
-    private int msgId;
+    private String msgId;
 
-    private MQMessageType msgType;
+    private MQMsgType msgType;
 
-    private MQMessageSource msgSource;
+    private MQMsgSource msgSource;
 
     private Message msg;
+
+    public MQMessage(MQMsgType type, MQMsgSource source, Message msg) {
+        this(msg.getMsgId(), type, source, msg);
+    }
 
 }

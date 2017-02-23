@@ -1,30 +1,36 @@
-package com.sdu.activemq.core.route;
+package com.sdu.activemq.core.broker.client;
 
 import com.google.common.collect.Maps;
 import com.sdu.activemq.core.MQConfig;
+import com.sdu.activemq.model.MQMessage;
+import com.sdu.activemq.model.msg.HeartBeatMsg;
 import com.sdu.activemq.network.client.NettyClient;
 import com.sdu.activemq.network.client.NettyClientConfig;
 import com.sdu.activemq.network.serialize.MessageObjectDecoder;
 import com.sdu.activemq.network.serialize.MessageObjectEncoder;
 import com.sdu.activemq.network.serialize.kryo.KryoSerializer;
 import com.sdu.activemq.utils.Utils;
-import io.netty.channel.ChannelInboundHandler;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
+import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
+import io.netty.handler.timeout.IdleStateHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import static com.sdu.activemq.model.MQMsgSource.ActiveMQCluster;
+import static com.sdu.activemq.model.MQMsgType.ActiveMQHeatBeat;
+
 /**
  *
  * @author hanhan.zhang
  * */
-public class BrokerConnector {
+public class BrokerTransport {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(BrokerConnector.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(BrokerTransport.class);
 
     public static final String BROKER_MESSAGE_SYNC_SOCKET_THREADS = "broker.message.sync.socket.threads";
 
@@ -46,7 +52,7 @@ public class BrokerConnector {
     //
     private KryoSerializer serializer = new KryoSerializer();
 
-    public BrokerConnector(String brokerAddress, MQConfig mqConfig, ChannelInboundHandler messageHandler) {
+    public BrokerTransport(String brokerAddress, MQConfig mqConfig, ChannelInboundHandler messageHandler) {
         this.brokerAddress = brokerAddress;
         this.mqConfig = mqConfig;
         this.messageHandler = messageHandler;
@@ -71,8 +77,11 @@ public class BrokerConnector {
         clientConfig.setChannelHandler(new ChannelInitializer<SocketChannel>() {
             @Override
             protected void initChannel(SocketChannel ch) throws Exception {
+                // 心跳[1秒内若是无数据读取, 则发送心跳]
+                ch.pipeline().addLast(new IdleStateHandler(1, 4, 0, TimeUnit.SECONDS));
                 ch.pipeline().addLast(new MessageObjectDecoder(serializer));
                 ch.pipeline().addLast(new MessageObjectEncoder(serializer));
+                ch.pipeline().addLast(new HeartBeatHandler());
                 ch.pipeline().addLast(messageHandler);
             }
         });
@@ -88,6 +97,24 @@ public class BrokerConnector {
                 nettyClient.stop(10, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 LOGGER.error("close message connector exception", e);
+            }
+        }
+    }
+
+    private class HeartBeatHandler extends ChannelInboundHandlerAdapter {
+
+        HeartBeatMsg msg = new HeartBeatMsg(Utils.socketAddressCastString(nettyClient.getLocalSocketAddress()));
+
+        @Override
+        public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+            super.userEventTriggered(ctx, evt);
+            if (evt instanceof IdleStateEvent) {
+                IdleStateEvent stateEvent = (IdleStateEvent) evt;
+                if (stateEvent.state() == IdleState.READER_IDLE) {
+                    // 心跳消息
+                    MQMessage mqMessage = new MQMessage(ActiveMQHeatBeat, ActiveMQCluster, msg);
+                    ctx.writeAndFlush(mqMessage);
+                }
             }
         }
     }

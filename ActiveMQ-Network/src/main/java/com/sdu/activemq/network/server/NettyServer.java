@@ -3,14 +3,17 @@ package com.sdu.activemq.network.server;
 import com.sdu.activemq.network.utils.NettyUtils;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Netty Server
@@ -29,7 +32,9 @@ public class NettyServer {
 
     private ChannelFuture channelFuture;
 
-    private int bindPort;
+    private AtomicBoolean start = new AtomicBoolean(false);
+
+    private InetSocketAddress socketAddress;
 
     public NettyServer(NettyServerConfig config) {
         this.config = config;
@@ -59,17 +64,34 @@ public class NettyServer {
 
         // start
         channelFuture = bootstrap.bind(new InetSocketAddress(config.getHost(), config.getPort()));
+        channelFuture.addListeners(new ChannelFutureListener() {
+            @Override
+            public void operationComplete(ChannelFuture future) throws Exception {
+                if (future.channel().isActive()) {
+                    start.set(true);
+                    socketAddress = (InetSocketAddress) future.channel().localAddress();
+                }
+            }
+        });
         channelFuture.syncUninterruptibly();
-        bindPort = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
 
-        LOGGER.info("server start listen port : {}", bindPort);
+        if (start.get()) {
+            LOGGER.info("server[{}] start success .", socketAddress);
+        }
     }
 
-    public int getListenPort() {
-        return bindPort;
+    public InetSocketAddress getSocketAddress() {
+        return socketAddress;
+    }
+
+    public boolean isServing() {
+        return start.get();
     }
 
     public void stop(int awaitTime, TimeUnit timeUnit) {
+        if (start.get()) {
+            start.set(false);
+        }
         if (channelFuture != null) {
             channelFuture.channel().closeFuture().awaitUninterruptibly(awaitTime, timeUnit);
             channelFuture = null;

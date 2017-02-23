@@ -1,6 +1,6 @@
 package com.sdu.activemq.core.cluster;
 
-import com.sdu.activemq.core.route.BrokerConnector;
+import com.sdu.activemq.core.broker.client.BrokerTransport;
 import com.sdu.activemq.model.MQMessage;
 
 /**
@@ -8,6 +8,9 @@ import com.sdu.activemq.model.MQMessage;
  * */
 public interface Cluster {
 
-    public BrokerConnector getConnector(MQMessage msg);
+    public void start() throws Exception;
 
+    public BrokerTransport getConnector(MQMessage msg);
+
+    public void destroy() throws Exception ;
 }

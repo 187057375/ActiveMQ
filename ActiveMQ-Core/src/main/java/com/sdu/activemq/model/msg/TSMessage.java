@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.Arrays;
+import java.util.UUID;
 
 /**
  * @author hanhan.zhang
@@ -15,9 +16,6 @@ import java.util.Arrays;
 @AllArgsConstructor
 @NoArgsConstructor
 public class TSMessage implements Message {
-
-    // 消息唯一标识
-    private int msgId;
 
     // 消息主题
     private String topic;
@@ -29,26 +27,8 @@ public class TSMessage implements Message {
     private long timestamp;
 
     @Override
-    public int getMsgId() {
-        return this.msgId;
+    public String getMsgId() {
+        return UUID.randomUUID().toString();
     }
 
-    @Override
-    public boolean equals(Object object) {
-        if (object instanceof TSMessage) {
-            TSMessage tsMessage = (TSMessage) object;
-            return tsMessage.getMsgId() == msgId && tsMessage.getTopic().equals(topic)
-                    && tsMessage.getTimestamp() == timestamp;
-        }
-        return false;
-    }
-
-    @Override
-    public int hashCode() {
-        int result = msgId;
-        result = 31 * result + (topic != null ? topic.hashCode() : 0);
-        result = 31 * result + Arrays.hashCode(msgBody);
-        result = 31 * result + (int) (timestamp ^ (timestamp >>> 32));
-        return result;
-    }
 }

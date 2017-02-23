@@ -2,6 +2,8 @@ package com.sdu.activemq.core.broker;
 
 import com.sdu.activemq.core.handler.MessageHandler;
 import com.sdu.activemq.core.handler.MessageInterceptor;
+import com.sdu.activemq.model.MQMessage;
+import com.sdu.activemq.model.MQMsgType;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import org.slf4j.Logger;
@@ -48,7 +50,19 @@ public class BrokerHandler extends ChannelInboundHandlerAdapter {
 
         @Override
         public void handleMessage(ChannelHandlerContext ctx, Object msg) {
+            if (msg.getClass() != MQMessage.class) {
+                return;
+            }
+            MQMessage mqMessage = (MQMessage) msg;
+            MQMsgType type = mqMessage.getMsgType();
+            switch (type) {
+                case ActiveMQHeatBeat:
+                    break;
+            }
+        }
 
+        private void processHearBeat(MQMessage mqMessage) {
+            LOGGER.debug("");
         }
     }
 

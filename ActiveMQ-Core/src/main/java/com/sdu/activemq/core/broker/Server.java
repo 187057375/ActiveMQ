@@ -5,8 +5,8 @@ package com.sdu.activemq.core.broker;
  * */
 public interface Server {
 
-    public void start();
+    public void start() throws Exception ;
 
-    public void shutdown();
+    public void shutdown() throws Exception;
 
 }

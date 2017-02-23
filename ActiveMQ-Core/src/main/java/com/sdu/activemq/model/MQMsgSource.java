@@ -5,15 +5,16 @@ package com.sdu.activemq.model;
  *
  * @author hanhan.zhang
  * */
-public enum MQMessageSource {
+public enum MQMsgSource {
 
+    ActiveMQCluster(0),
     ActiveMQConsumer(1),
     ActiveMQBroker(2),
     ActiveMQProducer(3);
 
     int source;
 
-    MQMessageSource(int source) {
+    MQMsgSource(int source) {
         this.source = source;
     }
 
