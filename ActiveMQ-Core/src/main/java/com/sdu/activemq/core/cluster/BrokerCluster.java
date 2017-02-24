@@ -131,6 +131,10 @@ public class BrokerCluster implements Cluster {
         //  1: 路由Broker
         //  2: 消息存储成功
         private void doMsgStore(ChannelHandlerContext ctx, MQMessage mqMessage) {
+            Channel channel = ctx.channel();
+            String producerAddress = Utils.socketAddressCastString((InetSocketAddress) channel.remoteAddress());
+            producerRoute.put(producerAddress, channel);
+            //
 
         }
     }

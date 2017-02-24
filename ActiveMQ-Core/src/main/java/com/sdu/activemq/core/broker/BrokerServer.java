@@ -169,4 +169,9 @@ public class BrokerServer implements Server {
             zkClientContext.destroy();
         }
     }
+
+    public static class BrokerNodeData {
+
+
+    }
 }
