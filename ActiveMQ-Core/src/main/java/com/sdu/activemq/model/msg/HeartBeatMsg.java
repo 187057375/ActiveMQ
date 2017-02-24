@@ -12,6 +12,10 @@ public class HeartBeatMsg implements Message {
 
     private String clientAddress;
 
+    public HeartBeatMsg() {
+
+    }
+
     public HeartBeatMsg(String clientAddress) {
         this.clientAddress = clientAddress;
     }

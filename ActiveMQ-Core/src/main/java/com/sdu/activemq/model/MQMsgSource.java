@@ -7,9 +7,9 @@ package com.sdu.activemq.model;
  * */
 public enum MQMsgSource {
 
-    ActiveMQCluster(0),
+    MQCluster(0),
     ActiveMQConsumer(1),
-    ActiveMQBroker(2),
+    MQBroker(2),
     ActiveMQProducer(3);
 
     int source;

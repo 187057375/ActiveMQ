@@ -5,12 +5,12 @@ package com.sdu.activemq.core.handler;
  * */
 public interface MessageInterceptor {
 
-    public void beforeProcess(Object msg);
+    public void beforeProcess(Object msg) throws Exception;
 
-    public void afterProcess(Object msg);
+    public void afterProcess(Object msg) throws Exception;
 
-    public void success(Object msg);
+    public void success(Object msg) throws Exception;
 
-    public void failure(Object msg, Throwable t);
+    public void failure(Object msg, Throwable t) throws Exception;
 
 }

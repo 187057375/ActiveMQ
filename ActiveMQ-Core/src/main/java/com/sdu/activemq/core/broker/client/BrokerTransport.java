@@ -21,8 +21,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static com.sdu.activemq.model.MQMsgSource.ActiveMQCluster;
-import static com.sdu.activemq.model.MQMsgType.ActiveMQHeatBeat;
+import static com.sdu.activemq.model.MQMsgSource.MQCluster;
+import static com.sdu.activemq.model.MQMsgType.MQHeartBeat;
 
 /**
  * Broker Server服务客户端
@@ -127,7 +127,7 @@ public class BrokerTransport {
                 IdleStateEvent stateEvent = (IdleStateEvent) evt;
                 if (stateEvent.state() == IdleState.READER_IDLE) {
                     // 心跳消息
-                    MQMessage mqMessage = new MQMessage(ActiveMQHeatBeat, ActiveMQCluster, msg);
+                    MQMessage mqMessage = new MQMessage(MQHeartBeat, MQCluster, msg);
                     ctx.writeAndFlush(mqMessage);
                 }
             }

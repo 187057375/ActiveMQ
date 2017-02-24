@@ -13,6 +13,7 @@
 
     <properties>
         <curator.version>2.11.1</curator.version>
+        <disruptor.version>3.3.6</disruptor.version>
     </properties>
 
     <dependencies>
@@ -43,6 +44,11 @@
             <artifactId>curator-recipes</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.lmax</groupId>
+            <artifactId>disruptor</artifactId>
+        </dependency>
+
         <!-- ActiveMQ网络传输  -->
         <dependency>
             <groupId>com.sdu.netty.mq</groupId>
@@ -58,6 +64,13 @@
                 <groupId>org.apache.curator</groupId>
                 <artifactId>curator-recipes</artifactId>
                 <version>${curator.version}</version>
+            </dependency>
+
+            <!-- disruptor队列 -->
+            <dependency>
+                <groupId>com.lmax</groupId>
+                <artifactId>disruptor</artifactId>
+                <version>${disruptor.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

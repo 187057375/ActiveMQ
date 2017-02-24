@@ -1,6 +1,7 @@
 package com.sdu.activemq.model.msg;
 
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.NonNull;
 
 /**
@@ -9,11 +10,20 @@ import lombok.NonNull;
 @AllArgsConstructor
 public class AckMessageImpl implements AckMessage {
 
+    @Getter
+    private String topic;
+
     @NonNull
-    private int msgId;
+    private String msgId;
 
     @NonNull
     private MsgAckStatus status;
+
+    @Getter
+    private long brokerMsgSequence;
+
+    @Getter
+    private String producerAddress;
 
     @Override
     public MsgAckStatus getAckStatus() {
@@ -21,7 +31,7 @@ public class AckMessageImpl implements AckMessage {
     }
 
     @Override
-    public int getMsgId() {
+    public String getMsgId() {
         return msgId;
     }
 }

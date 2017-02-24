@@ -85,9 +85,20 @@ public class ZkClientContext {
         watchers.add(watcher);
     }
 
+    public void updateNodeData(String path, byte[] data) throws Exception {
+        valid();
+        framework.setData().forPath(path, data);
+    }
+
     public byte[] getNodeData(String path) throws Exception {
         valid();
         return framework.getData().forPath(path);
+    }
+
+    public boolean isNodeExist(String path) throws Exception {
+        valid();
+        Stat stat = framework.checkExists().forPath(path);
+        return stat != null;
     }
 
     public List<String> getChildNode(String parentPath) throws Exception {
@@ -97,10 +108,6 @@ public class ZkClientContext {
 
     public String createNode(String path, byte []data) throws Exception {
         valid();
-        Stat stat = framework.checkExists().forPath(path);
-        if (stat != null) {
-            throw new IllegalStateException("node path[" + path + "] already exist");
-        }
         return framework.create().creatingParentsIfNeeded().forPath(path, data);
     }
 

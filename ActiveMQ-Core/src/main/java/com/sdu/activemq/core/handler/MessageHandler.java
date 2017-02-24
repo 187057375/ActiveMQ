@@ -1,5 +1,6 @@
 package com.sdu.activemq.core.handler;
 
+import com.sdu.activemq.model.MQMessage;
 import io.netty.channel.ChannelHandlerContext;
 
 /**
@@ -7,6 +8,6 @@ import io.netty.channel.ChannelHandlerContext;
  * */
 public interface MessageHandler {
 
-    public void handleMessage(ChannelHandlerContext ctx, Object msg);
+    public void handleMessage(ChannelHandlerContext ctx, MQMessage msg);
 
 }

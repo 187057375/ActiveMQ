@@ -1,0 +1,30 @@
+package com.sdu.activemq.model.msg;
+
+import com.sdu.activemq.utils.Utils;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+/**
+ * @author hanhan.zhang
+ * */
+@Setter
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public class MessageRequest implements Message {
+
+    private String topic;
+
+    // 起始序号
+    private long startSequence;
+
+    // 终止序号
+    private long endSequence;
+
+    @Override
+    public String getMsgId() {
+        return Utils.generateUUID();
+    }
+}

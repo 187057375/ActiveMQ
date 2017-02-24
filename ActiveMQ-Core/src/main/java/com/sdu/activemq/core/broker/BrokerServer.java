@@ -27,7 +27,15 @@ import java.util.concurrent.*;
 import static com.sdu.activemq.utils.Const.ZK_BROKER_PATH;
 
 /**
- * Broker Server启动并注册节点信息到Zookeeper
+ * Broker Server职责
+ *
+ *  1: MQ消息存储
+ *
+ *  2: Zk节点注册/更改
+ *
+ *      1': Broker Server启动注册节点[/activeMQ/broker/brokerId]
+ *
+ *      2': Broker Server消息存储成功更改节点[/activeMQ/topic/topicName/brokerId]
  *
  * @author hanhan.zhang
  * */
@@ -48,6 +56,7 @@ public class BrokerServer implements Server {
     private KryoSerializer serialize;
 
     private ExecutorService es;
+
 
     public BrokerServer(MQConfig mqConfig) {
         this.brokerConfig = new BrokerConfig(mqConfig);
@@ -74,7 +83,7 @@ public class BrokerServer implements Server {
         es = new ThreadPoolExecutor(poolSize, poolSize, 5, TimeUnit.MINUTES, queue);
 
         //
-        BrokerHandler handler = new BrokerHandler(es);
+        BrokerHandler brokerHandler = new BrokerHandler(es, UUID);
 
         // 序列化
         serialize = new KryoSerializer(MQMessage.class);
@@ -109,7 +118,7 @@ public class BrokerServer implements Server {
                 // 设置Socket数据通信编码
                 ch.pipeline().addLast(decoder);
                 ch.pipeline().addLast(encoder);
-                ch.pipeline().addLast(handler);
+                ch.pipeline().addLast(brokerHandler);
             }
         });
 
@@ -125,6 +134,10 @@ public class BrokerServer implements Server {
         zkClientContext.start();
         // 注册节点
         if (zkClientContext.isServing()) {
+            //
+            brokerHandler.setZkClientContext(zkClientContext);
+            brokerHandler.setBrokerSocketAddress(nettyServer.getSocketAddress());
+
             InetSocketAddress socketAddress = nettyServer.getSocketAddress();
             String host = socketAddress.getHostName();
             int port = socketAddress.getPort();
