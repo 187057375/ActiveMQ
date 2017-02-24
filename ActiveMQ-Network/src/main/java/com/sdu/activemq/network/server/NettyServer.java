@@ -6,11 +6,8 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -22,8 +19,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * */
 public class NettyServer {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(NettyServer.class);
-
     private NettyServerConfig config;
 
     private EventLoopGroup bossGroup;
@@ -32,8 +27,9 @@ public class NettyServer {
 
     private ChannelFuture channelFuture;
 
-    private AtomicBoolean start = new AtomicBoolean(false);
+    private AtomicBoolean started = new AtomicBoolean(false);
 
+    // 绑定的服务地址
     private InetSocketAddress socketAddress;
 
     public NettyServer(NettyServerConfig config) {
@@ -62,22 +58,19 @@ public class NettyServer {
             }
         }
 
-        // start
+        // started
         channelFuture = bootstrap.bind(new InetSocketAddress(config.getHost(), config.getPort()));
         channelFuture.addListeners(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
                 if (future.channel().isActive()) {
-                    start.set(true);
+                    started.set(true);
                     socketAddress = (InetSocketAddress) future.channel().localAddress();
                 }
             }
         });
-        channelFuture.syncUninterruptibly();
 
-        if (start.get()) {
-            LOGGER.info("server[{}] start success .", socketAddress);
-        }
+        channelFuture.syncUninterruptibly();
     }
 
     public InetSocketAddress getSocketAddress() {
@@ -85,12 +78,12 @@ public class NettyServer {
     }
 
     public boolean isServing() {
-        return start.get();
+        return started.get();
     }
 
     public void stop(int awaitTime, TimeUnit timeUnit) {
-        if (start.get()) {
-            start.set(false);
+        if (started.get()) {
+            started.set(false);
         }
         if (channelFuture != null) {
             channelFuture.channel().closeFuture().awaitUninterruptibly(awaitTime, timeUnit);

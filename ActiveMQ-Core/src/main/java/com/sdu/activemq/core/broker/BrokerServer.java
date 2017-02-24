@@ -11,20 +11,20 @@ import com.sdu.activemq.network.serialize.kryo.KryoSerializer;
 import com.sdu.activemq.network.server.NettyServer;
 import com.sdu.activemq.network.server.NettyServerConfig;
 import com.sdu.activemq.utils.Utils;
+import com.sdu.activemq.utils.ZkUtils;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.*;
-
-import static com.sdu.activemq.utils.Const.ZK_BROKER_PATH;
 
 /**
  * Broker Server职责
@@ -43,19 +43,23 @@ public class BrokerServer implements Server {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BrokerServer.class);
 
-    private String UUID;
+    @Getter
+    private String brokerId;
 
+    @Getter
     private NettyServer nettyServer;
 
     private BrokerConfig brokerConfig;
 
     private ZkConfig zkConfig;
 
+    @Getter
     private ZkClientContext zkClientContext;
 
     private KryoSerializer serialize;
 
-    private ExecutorService es;
+    @Getter
+    private ExecutorService executorService;
 
 
     public BrokerServer(MQConfig mqConfig) {
@@ -80,10 +84,10 @@ public class BrokerServer implements Server {
         } else {
             queue = new ArrayBlockingQueue<>(queueSize);
         }
-        es = new ThreadPoolExecutor(poolSize, poolSize, 5, TimeUnit.MINUTES, queue);
+        executorService = new ThreadPoolExecutor(poolSize, poolSize, 5, TimeUnit.MINUTES, queue);
 
         //
-        BrokerHandler brokerHandler = new BrokerHandler(es, UUID);
+        BrokerMessageHandler brokerMessageHandler = new BrokerMessageHandler(this);
 
         // 序列化
         serialize = new KryoSerializer(MQMessage.class);
@@ -118,7 +122,7 @@ public class BrokerServer implements Server {
                 // 设置Socket数据通信编码
                 ch.pipeline().addLast(decoder);
                 ch.pipeline().addLast(encoder);
-                ch.pipeline().addLast(brokerHandler);
+                ch.pipeline().addLast(brokerMessageHandler);
             }
         });
 
@@ -129,40 +133,34 @@ public class BrokerServer implements Server {
             throw new IllegalStateException("broker server start failed.");
         }
 
+        LOGGER.info("broker server start success, address = {}", Utils.socketAddressCastString(nettyServer.getSocketAddress()));
+
         // 连接zk
         zkClientContext = new ZkClientContext(zkConfig);
         zkClientContext.start();
         // 注册节点
         if (zkClientContext.isServing()) {
-            //
-            brokerHandler.setZkClientContext(zkClientContext);
-            brokerHandler.setBrokerSocketAddress(nettyServer.getSocketAddress());
-
             InetSocketAddress socketAddress = nettyServer.getSocketAddress();
             String host = socketAddress.getHostName();
             int port = socketAddress.getPort();
             String broker = host + ":" + port;
-            UUID = Utils.generateUUID();
-            String path = zkClientContext.createNode(zkNodePath(UUID), broker.getBytes());
+            brokerId = Utils.generateUUID();
+            String path = zkClientContext.createNode(ZkUtils.brokerServerNode(brokerId), broker.getBytes());
             LOGGER.info("broker server create zk node : {}", path);
         }
-    }
-
-    private String zkNodePath(String uuid) {
-        return ZK_BROKER_PATH + "/" + uuid;
     }
 
     @Override
     public void shutdown() throws Exception {
         // 删除节点
-        zkClientContext.deleteNode(zkNodePath(UUID));
+        zkClientContext.deleteNode(ZkUtils.brokerServerNode(brokerId));
 
         if (nettyServer != null) {
             nettyServer.stop(10, TimeUnit.SECONDS);
         }
 
-        if (es != null) {
-            es.shutdown();
+        if (executorService != null) {
+            executorService.shutdown();
         }
 
         if (zkClientContext != null) {

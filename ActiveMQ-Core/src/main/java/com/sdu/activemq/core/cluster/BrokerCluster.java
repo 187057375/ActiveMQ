@@ -1,21 +1,21 @@
 package com.sdu.activemq.core.cluster;
 
 import com.sdu.activemq.core.MQConfig;
-import com.sdu.activemq.core.broker.BrokerHandler;
-import com.sdu.activemq.core.broker.client.BrokerTransportPool;
+import com.sdu.activemq.core.broker.BrokerMessageHandler;
 import com.sdu.activemq.core.broker.client.BrokerTransport;
+import com.sdu.activemq.core.broker.client.BrokerTransportPool;
 import com.sdu.activemq.core.zk.ZkClientContext;
 import com.sdu.activemq.core.zk.ZkConfig;
 import com.sdu.activemq.model.MQMessage;
+import com.sdu.activemq.model.MQMsgSource;
 import com.sdu.activemq.model.MQMsgType;
-import com.sdu.activemq.model.msg.AckMessageImpl;
-import com.sdu.activemq.model.msg.MessageRequest;
-import com.sdu.activemq.model.msg.MsgAckStatus;
+import com.sdu.activemq.model.msg.*;
 import com.sdu.activemq.utils.GsonUtils;
 import com.sdu.activemq.utils.Utils;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.util.internal.ConcurrentSet;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.cache.ChildData;
 import org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent;
@@ -23,12 +23,12 @@ import org.apache.curator.framework.recipes.cache.PathChildrenCacheListener;
 import org.apache.logging.log4j.util.Strings;
 
 import java.net.InetSocketAddress;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.sdu.activemq.model.MQMsgSource.MQCluster;
-import static com.sdu.activemq.model.MQMsgType.MQSMessageRequest;
+import static com.sdu.activemq.model.MQMsgType.MQMessageRequest;
 import static com.sdu.activemq.utils.Const.ZK_BROKER_PATH;
 import static com.sdu.activemq.utils.Const.ZK_TOPIC_PATH;
 
@@ -50,19 +50,27 @@ public class BrokerCluster implements Cluster {
     // 记录Topic消费序号[key = 消息主题, value = [key = 消费组名, value = 消费位置]]
     private ConcurrentHashMap<String, Map<String, AtomicLong>> topicConsumeRecord;
 
-    // 记录'Producer'路由表[key = 'producer'服务地址, value = Netty Channel]
+    // 消息消费推送路由表[key = 消息主题, value = [key = 消费组, value = 客户端连接集合]]
+    private ConcurrentHashMap<String, Map<String, Set<Channel>>> topConsumeClientRecord;
+
+    // 记录'Producer'路由表[key = Producer服务地址, value = Netty Channel]
     private ConcurrentHashMap<String, Channel> producerRoute;
+
 
     // Zk
     private ZkClientContext zkClientContext;
 
     private ZkConfig zkConfig;
 
+    private Random loadRandom;
+
     public BrokerCluster(MQConfig mqConfig) {
         zkConfig = new ZkConfig(mqConfig);
         connectors = new ConcurrentHashMap<>();
         topicConsumeRecord = new ConcurrentHashMap<>();
+        topConsumeClientRecord = new ConcurrentHashMap<>();
         producerRoute = new ConcurrentHashMap<>();
+        loadRandom = new Random();
     }
 
     @Override
@@ -86,6 +94,17 @@ public class BrokerCluster implements Cluster {
         zkClientContext.destroy();
     }
 
+    // 消息存储负载均衡
+    private BrokerNode loadBalance() {
+        ArrayList<BrokerNode> brokerNodes = new ArrayList<>();
+        Enumeration<BrokerNode> it = connectors.keys();
+        while (it.hasMoreElements()) {
+            brokerNodes.add(it.nextElement());
+        }
+
+        return brokerNodes.get(loadRandom.nextInt(brokerNodes.size()));
+    }
+
     /**
      * MQ消息处理[目前单节点, 存在问题: 处理各种网络连接/高可用]
      *
@@ -104,16 +123,42 @@ public class BrokerCluster implements Cluster {
                 MQMessage mqMessage = (MQMessage) msg;
                 MQMsgType type = mqMessage.getMsgType();
                 switch (type) {
-                    case MQMessageAck:
+                    case MQSubscribe:
+                        doMsgConsumer(ctx, mqMessage);
+                        break;
+                    case MQMessageStoreAck:
                         doMsgStoreAck(mqMessage);
                         break;
                     case MQMessageStore:
                         doMsgStore(ctx, mqMessage);
                         break;
-
+                    case MQMessageResponse:
+                        break;
                 }
             }
             super.channelRead(ctx, msg);
+        }
+
+        //
+        private void doMsgConsumer(ChannelHandlerContext ctx, MQMessage mqMessage) {
+            MsgSubscribe request = (MsgSubscribe) mqMessage.getMsg();
+            Channel channel = ctx.channel();
+            // 暂且不创建消费端的连接池
+            Map<String, Set<Channel>> consumeClientRecord = topConsumeClientRecord.get(request.getTopic());
+            if (consumeClientRecord == null) {
+                consumeClientRecord = new ConcurrentHashMap<>();
+            }
+            Set<Channel> clients = consumeClientRecord.get(request.getConsumerGroup());
+            if (clients == null) {
+                clients = new ConcurrentSet<>();
+            }
+            clients.add(channel);
+            consumeClientRecord.put(request.getConsumerGroup(), clients);
+            topConsumeClientRecord.put(request.getTopic(), consumeClientRecord);
+
+            // 响应消费
+            MQMessage msg = new MQMessage(MQMsgType.MQSubscribeAck, MQMsgSource.MQCluster, new SimpleMessage());
+            ctx.writeAndFlush(msg);
         }
 
         // Broker消息存储确认
@@ -130,11 +175,39 @@ public class BrokerCluster implements Cluster {
         // Note:
         //  1: 路由Broker
         //  2: 消息存储成功
-        private void doMsgStore(ChannelHandlerContext ctx, MQMessage mqMessage) {
+        private void doMsgStore(ChannelHandlerContext ctx, MQMessage mqMessage) throws Exception {
             Channel channel = ctx.channel();
             String producerAddress = Utils.socketAddressCastString((InetSocketAddress) channel.remoteAddress());
             producerRoute.put(producerAddress, channel);
+
+            TSMessage tsMessage = (TSMessage) mqMessage.getMsg();
             //
+            String topicPath = ZK_TOPIC_PATH + "/" + tsMessage.getTopic();
+            List<String> brokerServerList = zkClientContext.getChildNode(topicPath);
+            BrokerNode brokerNode;
+            if (brokerServerList == null || brokerServerList.isEmpty()) {
+                brokerNode = loadBalance();
+            } else {
+                // 暂且只存储在一个Broker服务
+                String brokerId = brokerServerList.get(0);
+                byte []dataByte = zkClientContext.getNodeData(topicPath + "/" + brokerId);
+                String data = new String(dataByte);
+                if (Strings.isNotEmpty(data)) {
+                    BrokerMessageHandler.TopicNodeData topicNodeData = GsonUtils.fromJson(data, BrokerMessageHandler.TopicNodeData.class);
+                    brokerNode = new BrokerNode(topicNodeData.getBrokerId(), Utils.stringCastSocketAddress(topicNodeData.getBrokerServer(), ":"));
+                } else {
+                    brokerNode = loadBalance();
+                }
+            }
+
+            // 消息存储
+            BrokerTransportPool pool = connectors.get(brokerNode);
+            BrokerTransport transport = pool.borrowObject();
+            transport.writeAndFlush(mqMessage);
+            pool.returnObject(transport);
+        }
+
+        private void doMsgResponse() {
 
         }
     }
@@ -169,7 +242,7 @@ public class BrokerCluster implements Cluster {
         private void topicChangedAndRequest(ChildData childData) throws Exception {
             String data = new String(childData.getData());
             if (Strings.isNotEmpty(data)) {
-                BrokerHandler.TopicNodeData topicNodeData = GsonUtils.fromJson(data, BrokerHandler.TopicNodeData.class);
+                BrokerMessageHandler.TopicNodeData topicNodeData = GsonUtils.fromJson(data, BrokerMessageHandler.TopicNodeData.class);
                 // 向Broker发送数据请求
                 InetSocketAddress socketAddress = Utils.stringCastSocketAddress(topicNodeData.getBrokerServer(), ":");
                 BrokerNode brokerNode = new BrokerNode(topicNodeData.getBrokerId(), socketAddress);
@@ -178,9 +251,10 @@ public class BrokerCluster implements Cluster {
                 //
                 long startSequence = getTopicConsumeMinSequence(topicNodeData.getTopic(), topicConsumeRecord);
                 long endSequence = topicNodeData.getCurrentMsgSequence();
-                MessageRequest request = new MessageRequest(topicNodeData.getTopic(), startSequence, endSequence);
-                MQMessage mqMessage = new MQMessage(MQSMessageRequest, MQCluster, request);
+                MsgRequest request = new MsgRequest(topicNodeData.getTopic(), startSequence, endSequence);
+                MQMessage mqMessage = new MQMessage(MQMessageRequest, MQCluster, request);
                 transport.writeAndFlush(mqMessage);
+                pool.returnObject(transport);
             }
         }
 

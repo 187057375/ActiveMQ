@@ -13,14 +13,12 @@ import lombok.Setter;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public class MessageRequest implements Message {
+public class MsgConsumeRequest implements Message {
 
     private String topic;
 
-    // 起始序号
     private long startSequence;
 
-    // 终止序号
     private long endSequence;
 
     @Override
