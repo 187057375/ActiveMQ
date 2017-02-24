@@ -1,4 +1,4 @@
-package com.sdu.activemq.model.msg;
+package com.sdu.activemq.msg;
 
 import java.io.Serializable;
 

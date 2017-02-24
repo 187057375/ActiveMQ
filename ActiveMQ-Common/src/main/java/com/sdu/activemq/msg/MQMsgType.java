@@ -1,4 +1,4 @@
-package com.sdu.activemq.model;
+package com.sdu.activemq.msg;
 
 /**
  * MQ消息类型

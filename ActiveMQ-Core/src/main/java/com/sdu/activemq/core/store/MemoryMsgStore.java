@@ -1,7 +1,7 @@
 package com.sdu.activemq.core.store;
 
 import com.google.common.collect.Lists;
-import com.sdu.activemq.model.msg.TSMessage;
+import com.sdu.activemq.msg.MsgContent;
 import org.apache.logging.log4j.util.Strings;
 
 import java.util.Collections;
@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * @author hanhan.zhang
  * */
-public class MemoryMsgStore implements MsgStore<TSMessage, String> {
+public class MemoryMsgStore implements MsgStore<MsgContent, String> {
 
     private ConcurrentHashMap<String, Map<Long, String>> msgDataSource;
 
@@ -21,7 +21,7 @@ public class MemoryMsgStore implements MsgStore<TSMessage, String> {
     }
 
     @Override
-    public void store(TSMessage msg) {
+    public void store(MsgContent msg) {
         String topic = msg.getTopic();
         if (Strings.isEmpty(topic)) {
             return;

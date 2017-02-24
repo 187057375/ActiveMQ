@@ -1,14 +1,16 @@
-package com.sdu.activemq.model.msg;
+package com.sdu.activemq.msg;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.ToString;
 
 /**
  * @author hanhan.zhang
  * */
 @AllArgsConstructor
-public class AckMessageImpl implements AckMessage {
+@ToString
+public class MsgAckImpl implements MsgAck {
 
     @Getter
     private String topic;

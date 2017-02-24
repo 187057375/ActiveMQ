@@ -17,4 +17,9 @@ public class ZkUtils {
     public static String brokerTopicNode(String topic, String brokerId) {
         return ZK_TOPIC_PATH + "/" + topic + "/" + brokerId;
     }
+
+    public static String brokerTopicNode(String topic) {
+        return ZK_TOPIC_PATH + "/" + topic;
+    }
+
 }

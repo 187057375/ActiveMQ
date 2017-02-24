@@ -2,10 +2,7 @@ package com.sdu.activemq.core.broker;
 
 import com.google.common.base.Strings;
 import com.sdu.activemq.core.store.MemoryMsgStore;
-import com.sdu.activemq.model.MQMessage;
-import com.sdu.activemq.model.MQMsgSource;
-import com.sdu.activemq.model.MQMsgType;
-import com.sdu.activemq.model.msg.*;
+import com.sdu.activemq.msg.*;
 import com.sdu.activemq.utils.GsonUtils;
 import com.sdu.activemq.utils.Utils;
 import com.sdu.activemq.utils.ZkUtils;
@@ -26,6 +23,9 @@ import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static com.sdu.activemq.msg.MQMsgSource.MQBroker;
+import static com.sdu.activemq.msg.MQMsgType.MQHeartBeatAck;
 
 /**
  * MQ消息处理:
@@ -106,10 +106,10 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
      * 客户端心跳处理
      * */
     private void doHeartbeat(ChannelHandlerContext ctx, MQMessage msg) {
-        HeartBeatMsg heartBeatMsg = (HeartBeatMsg) msg.getMsg();
+        MsgHeartBeat heartBeatMsg = (MsgHeartBeat) msg.getMsg();
         LOGGER.debug("broker server receive client[] heartbeat, msgId : {} .", heartBeatMsg.getClientAddress(), msg.getMsgId());
         //
-        MQMessage mqMessage = new MQMessage(MQMsgType.MQHeartBeatAck, MQMsgSource.MQBroker, new HeartBeatMsg());
+        MQMessage mqMessage = new MQMessage(MQHeartBeatAck, MQBroker, new MsgHeartBeat());
         ctx.writeAndFlush(mqMessage);
     }
 
@@ -125,25 +125,25 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
         @Override
         public void storeMessage(ChannelHandlerContext ctx, MQMessage msg) {
             long msgSequence = sequence.getAndIncrement();
-            TSMessage tsMessage = (TSMessage) msg.getMsg();
-            tsMessage.setBrokerMsgSequence(msgSequence);
-            msgStore.store(tsMessage);
+            MsgContent msgContent = (MsgContent) msg.getMsg();
+            msgContent.setBrokerMsgSequence(msgSequence);
+            msgStore.store(msgContent);
             // 消息确认
-            AckMessageImpl ackMessage = new AckMessageImpl(tsMessage.getTopic(), msg.getMsgId(), MsgAckStatus.SUCCESS, msgSequence, tsMessage.getProducerAddress());
+            MsgAckImpl ackMessage = new MsgAckImpl(msgContent.getTopic(), msg.getMsgId(), MsgAckStatus.SUCCESS, msgSequence, msgContent.getProducerAddress());
             MQMessage mqMessage = new MQMessage(MQMsgType.MQMessageStoreAck, MQMsgSource.MQBroker, ackMessage);
             ctx.writeAndFlush(mqMessage);
         }
 
         @Override
         public void consumeMessage(ChannelHandlerContext ctx, MQMessage msg) {
-            MsgConsumeRequest consumeRequest = (MsgConsumeRequest) msg.getMsg();
-            String topic = consumeRequest.getTopic();
-            long start = consumeRequest.getStartSequence();
-            long end = consumeRequest.getEndSequence();
+            MsgRequest request = (MsgRequest) msg.getMsg();
+            String topic = request.getTopic();
+            long start = request.getStartSequence();
+            long end = request.getEndSequence();
             List<String> msgList = msgStore.getMsg(topic, start, end);
 
             // 响应客户端
-            MsgConsumeResponse response = new MsgConsumeResponse(topic, msgList);
+            MsgResponse response = new MsgResponse(topic, start, end, msgList);
             MQMessage mqMessage = new MQMessage(MQMsgType.MQMessageResponse, MQMsgSource.MQBroker, response);
             ctx.writeAndFlush(mqMessage);
         }
@@ -157,10 +157,10 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
 
         @Override
         public void beforeProcess(Object msg) throws Exception {
-            if (msg.getClass() != TSMessage.class) {
+            if (msg.getClass() != MsgContent.class) {
                 return;
             }
-            TSMessage message = (TSMessage) msg;
+            MsgContent message = (MsgContent) msg;
             if (!created.get()) {
                 String brokerId = brokerServer.getBrokerId();
                 String path = ZkUtils.brokerTopicNode(brokerId, message.getTopic());
@@ -184,10 +184,10 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
 
         @Override
         public void success(Object msg) throws Exception {
-            if (msg.getClass() != TSMessage.class) {
+            if (msg.getClass() != MsgContent.class) {
                 return;
             }
-            TSMessage message = (TSMessage) msg;
+            MsgContent message = (MsgContent) msg;
             // 更新[/activeMQ/topic/topicName/brokerId]消息
             String brokeId = brokerServer.getBrokerId();
             String path = ZkUtils.brokerTopicNode(brokeId, message.getTopic());

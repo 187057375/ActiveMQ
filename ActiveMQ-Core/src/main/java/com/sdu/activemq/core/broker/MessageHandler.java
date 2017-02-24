@@ -1,6 +1,6 @@
 package com.sdu.activemq.core.broker;
 
-import com.sdu.activemq.model.MQMessage;
+import com.sdu.activemq.msg.MQMessage;
 import io.netty.channel.ChannelHandlerContext;
 
 /**

@@ -1,12 +1,10 @@
-package com.sdu.activemq.model.msg;
+package com.sdu.activemq.msg;
 
+import com.sdu.activemq.util.Utils;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.util.Arrays;
-import java.util.UUID;
 
 /**
  * @author hanhan.zhang
@@ -15,7 +13,7 @@ import java.util.UUID;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public class TSMessage implements Message {
+public class MsgContent implements Message {
 
     // 消息主题
     private String topic;
@@ -32,9 +30,13 @@ public class TSMessage implements Message {
     // Broker Server产生的序号
     private long brokerMsgSequence;
 
+    public MsgContent(String topic, String producerAddress, byte[] msgBody, long timestamp) {
+        this(topic, producerAddress, msgBody, timestamp, 0L);
+    }
+
     @Override
     public String getMsgId() {
-        return UUID.randomUUID().toString();
+        return Utils.generateUUID();
     }
 
 }

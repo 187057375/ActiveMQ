@@ -2,8 +2,8 @@ package com.sdu.activemq.core.broker.client;
 
 import com.google.common.collect.Maps;
 import com.sdu.activemq.core.MQConfig;
-import com.sdu.activemq.model.MQMessage;
-import com.sdu.activemq.model.msg.HeartBeatMsg;
+import com.sdu.activemq.msg.MQMessage;
+import com.sdu.activemq.msg.MsgHeartBeat;
 import com.sdu.activemq.network.client.NettyClient;
 import com.sdu.activemq.network.client.NettyClientConfig;
 import com.sdu.activemq.network.serialize.MessageObjectDecoder;
@@ -21,8 +21,9 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static com.sdu.activemq.model.MQMsgSource.MQCluster;
-import static com.sdu.activemq.model.MQMsgType.MQHeartBeat;
+import static com.sdu.activemq.msg.MQMsgSource.MQCluster;
+import static com.sdu.activemq.msg.MQMsgType.MQHeartBeat;
+
 
 /**
  * Broker Server服务客户端
@@ -42,7 +43,6 @@ public class BrokerTransport {
     // Broker Server客户端Socket接收缓冲区
     private static final String BROKER_TRANSPORT_SOCKET_RCV_BUF = "broker.transport.socket.rcv.buf";
 
-    private static final String BROKER_TRANSPORT_SOCKET_EPOOL = "broker.transport.socket.epoll";
 
     // MQ Broker服务地址
     private String brokerAddress;
@@ -68,7 +68,7 @@ public class BrokerTransport {
      * */
     private void doStart() {
         NettyClientConfig clientConfig = new NettyClientConfig();
-        clientConfig.setEPool(mqConfig.getBoolean(BROKER_TRANSPORT_SOCKET_EPOOL, false));
+        clientConfig.setEPool(false);
         clientConfig.setSocketThreads(mqConfig.getInt(BROKER_TRANSPORT_SOCKET_THREADS, 10));
         clientConfig.setClientThreadFactory(Utils.buildThreadFactory("message-sync-socket-thread-%d"));
         clientConfig.setRemoteAddress(brokerAddress);
@@ -118,7 +118,7 @@ public class BrokerTransport {
 
     private class HeartBeatHandler extends ChannelInboundHandlerAdapter {
 
-        HeartBeatMsg msg = new HeartBeatMsg(Utils.socketAddressCastString(nettyClient.getLocalSocketAddress()));
+        MsgHeartBeat msg = new MsgHeartBeat(Utils.socketAddressCastString(nettyClient.getLocalSocketAddress()));
 
         @Override
         public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {

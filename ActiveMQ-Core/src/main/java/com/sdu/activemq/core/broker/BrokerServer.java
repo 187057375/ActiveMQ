@@ -4,7 +4,7 @@ import com.google.common.collect.Maps;
 import com.sdu.activemq.core.MQConfig;
 import com.sdu.activemq.core.zk.ZkClientContext;
 import com.sdu.activemq.core.zk.ZkConfig;
-import com.sdu.activemq.model.MQMessage;
+import com.sdu.activemq.msg.MQMessage;
 import com.sdu.activemq.network.serialize.MessageObjectDecoder;
 import com.sdu.activemq.network.serialize.MessageObjectEncoder;
 import com.sdu.activemq.network.serialize.kryo.KryoSerializer;

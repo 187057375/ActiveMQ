@@ -1,6 +1,6 @@
-package com.sdu.activemq.model.msg;
+package com.sdu.activemq.msg;
 
-import com.sdu.activemq.utils.Utils;
+import com.sdu.activemq.util.Utils;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -13,11 +13,15 @@ import lombok.Setter;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public class MsgSubscribe implements Message {
+public class MsgRequest implements Message {
 
     private String topic;
 
-    private String consumerGroup;
+    // 起始序号
+    private long startSequence;
+
+    // 终止序号
+    private long endSequence;
 
     @Override
     public String getMsgId() {

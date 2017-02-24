@@ -1,6 +1,5 @@
-package com.sdu.activemq.model;
+package com.sdu.activemq.msg;
 
-import com.sdu.activemq.model.msg.Message;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;

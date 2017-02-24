@@ -1,4 +1,4 @@
-package com.sdu.activemq.model.msg;
+package com.sdu.activemq.msg;
 
 import lombok.Getter;
 
@@ -8,15 +8,15 @@ import java.util.UUID;
  * @author hanhan.zhang
  * */
 @Getter
-public class HeartBeatMsg implements Message {
+public class MsgHeartBeat implements Message {
 
     private String clientAddress;
 
-    public HeartBeatMsg() {
+    public MsgHeartBeat() {
 
     }
 
-    public HeartBeatMsg(String clientAddress) {
+    public MsgHeartBeat(String clientAddress) {
         this.clientAddress = clientAddress;
     }
 

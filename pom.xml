@@ -12,6 +12,7 @@
         <module>ActiveMQ-Core</module>
         <module>ActiveMQ-Network</module>
         <module>ActiveMQ-Client</module>
+        <module>ActiveMQ-Common</module>
     </modules>
 
     <properties>

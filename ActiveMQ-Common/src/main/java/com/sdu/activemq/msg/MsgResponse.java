@@ -1,6 +1,6 @@
-package com.sdu.activemq.model.msg;
+package com.sdu.activemq.msg;
 
-import com.sdu.activemq.utils.Utils;
+import com.sdu.activemq.util.Utils;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -15,9 +15,13 @@ import java.util.List;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public class MsgConsumeResponse implements Message {
+public class MsgResponse implements Message {
 
     private String topic;
+
+    private long start;
+
+    private long end;
 
     private List<String> msgList;
 

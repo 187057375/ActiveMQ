@@ -1,4 +1,4 @@
-package com.sdu.activemq.model.msg;
+package com.sdu.activemq.msg;
 
 /**
  * @author hanhan.zhang
