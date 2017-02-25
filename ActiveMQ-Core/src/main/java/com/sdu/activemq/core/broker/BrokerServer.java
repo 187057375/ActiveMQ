@@ -115,6 +115,9 @@ public class BrokerServer implements Server {
             @Override
             protected void initChannel(SocketChannel ch) throws Exception {
                 // 设置Socket数据通信编码
+                // Note:
+                //  1: Decode/Encode不可共享
+                //  2: 重写isSharable()
                 KryoSerializer kryoSerializer = new KryoSerializer(MQMessage.class);
                 ch.pipeline().addLast(new MessageObjectDecoder(kryoSerializer));
                 ch.pipeline().addLast(new MessageObjectEncoder(kryoSerializer));

@@ -20,9 +20,7 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
 import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.recipes.cache.ChildData;
-import org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent;
-import org.apache.curator.framework.recipes.cache.PathChildrenCacheListener;
+import org.apache.curator.framework.recipes.cache.*;
 import org.apache.logging.log4j.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,10 +32,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static com.sdu.activemq.msg.MQMsgSource.MQCluster;
-import static com.sdu.activemq.msg.MQMsgType.MQMessageRequest;
+import static com.sdu.activemq.msg.MQMsgType.MQMsgRequest;
 import static com.sdu.activemq.msg.MQMsgType.MQSubscribeAck;
 import static com.sdu.activemq.utils.Const.ZK_BROKER_PATH;
 import static com.sdu.activemq.utils.Const.ZK_TOPIC_PATH;
+import static org.apache.curator.framework.recipes.cache.TreeCacheEvent.Type.NODE_UPDATED;
 
 /**
  * BrokerCluster职责:
@@ -94,7 +93,7 @@ public class BrokerCluster implements Cluster {
         // Broker Server上线/下线监控
         zkClientContext.addPathListener(ZK_BROKER_PATH, true, new BrokerPathChildrenCacheListener());
         // Topic Message节点监控
-        zkClientContext.addPathListener(ZK_TOPIC_PATH, true, new TopicMessagePathChildrenCacheListener());
+        zkClientContext.addSubAllPathListener(ZK_TOPIC_PATH, new TopicMessagePathChildrenCacheListener());
 
         // 启动Server
         startClusterServer();
@@ -185,12 +184,11 @@ public class BrokerCluster implements Cluster {
                     case MQSubscribe:
                         doMsgSubscribe(ctx, mqMessage);
                         break;
-                    case MQMessageStore:
+                    case MQMsgStore:
                         doMsgStore(ctx, mqMessage);
                         break;
                 }
             }
-            super.channelRead(ctx, msg);
         }
 
         /**
@@ -199,6 +197,11 @@ public class BrokerCluster implements Cluster {
         private void doMsgSubscribe(ChannelHandlerContext ctx, MQMessage mqMessage) {
             MsgSubscribe subscribe = (MsgSubscribe) mqMessage.getMsg();
             Channel channel = ctx.channel();
+
+            String clientAddress = Utils.socketAddressCastString((InetSocketAddress) channel.remoteAddress());
+
+            LOGGER.info("Consumer client : {}, consume msg group : {}, consume topic : {}", clientAddress, subscribe.getConsumerGroup(), subscribe.getTopic());
+
             Map<String, List<Channel>> consumeClientRecord = topicConsumeClientRecord.get(subscribe.getTopic());
             if (consumeClientRecord == null) {
                 consumeClientRecord = new ConcurrentHashMap<>();
@@ -238,6 +241,7 @@ public class BrokerCluster implements Cluster {
             producerRoute.put(producerAddress, channel);
 
             MsgContent msgContent = (MsgContent) mqMessage.getMsg();
+            msgContent.setProducerAddress(producerAddress);
 
             // 路由'Broker'并转存主题消息
             String topicPath = ZkUtils.brokerTopicNode(msgContent.getTopic());
@@ -276,7 +280,7 @@ public class BrokerCluster implements Cluster {
      *
      *  Note:
      *
-     *    BrokerMsgHandler被过个BrokerTransport恭喜, 需添加@Sharable标签
+     *    BrokerMsgHandler被过个BrokerTransport共享, 需添加@Sharable标签
      * */
     @ChannelHandler.Sharable
     private class BrokerMsgHandler extends ChannelInboundHandlerAdapter {
@@ -287,15 +291,14 @@ public class BrokerCluster implements Cluster {
                 MQMessage mqMessage = (MQMessage) msg;
                 MQMsgType type = mqMessage.getMsgType();
                 switch (type) {
-                    case MQMessageStoreAck:
+                    case MQMsgStoreAck:
                         doMsgStoreAck(mqMessage);
                         break;
-                    case MQMessageResponse:
+                    case MQMsgResponse:
                         doMsgResponse(mqMessage);
                         break;
                 }
             }
-            super.channelRead(ctx, msg);
         }
 
         /**
@@ -303,6 +306,9 @@ public class BrokerCluster implements Cluster {
          * */
         private void doMsgStoreAck(MQMessage mqMessage) {
             MsgAckImpl ackMessage = (MsgAckImpl) mqMessage.getMsg();
+            if (ackMessage.getAckStatus() == MsgAckStatus.SUCCESS) {
+                LOGGER.info("cluster store msg ack, topic : {}, brokerMsgSequence : {}", ackMessage.getTopic(), ackMessage.getBrokerMsgSequence());
+            }
             String address = ackMessage.getProducerAddress();
             Channel channel = producerRoute.get(address);
             channel.writeAndFlush(mqMessage);
@@ -318,6 +324,7 @@ public class BrokerCluster implements Cluster {
             // 推送'Consumer'消费端
             Map<String, List<Channel>> consumeClient = topicConsumeClientRecord.get(topic);
             if (consumeClient == null) {
+                LOGGER.info("No consumer, topic : {}", topic);
                 return;
             }
 
@@ -329,6 +336,9 @@ public class BrokerCluster implements Cluster {
                 long start = position.get();
                 position.set(start + response.getEnd() - response.getStart());
                 response.setStart(start);
+
+                LOGGER.info("Consumer group : {}, consume msg from {} to {} sequence", group, start, response.getEnd());
+
                 channel.writeAndFlush(msg);
             });
         }
@@ -342,19 +352,14 @@ public class BrokerCluster implements Cluster {
      *  1: Topic下有新消息, 通知Topic下的消费者
      *
      * */
-    private class TopicMessagePathChildrenCacheListener implements PathChildrenCacheListener {
+    private class TopicMessagePathChildrenCacheListener implements TreeCacheListener {
+
 
         @Override
-        public void childEvent(CuratorFramework client, PathChildrenCacheEvent event) throws Exception {
-            PathChildrenCacheEvent.Type type = event.getType();
-            ChildData childData = event.getData();
-            switch (type) {
-                case CHILD_ADDED:
-                    topicChangedAndRequest(childData);
-                    break;
-                case CHILD_UPDATED:
-                    topicChangedAndRequest(childData);
-                    break;
+        public void childEvent(CuratorFramework client, TreeCacheEvent event) throws Exception {
+            TreeCacheEvent.Type type = event.getType();
+            if (type == NODE_UPDATED) {
+                topicChangedAndRequest(event.getData());
             }
         }
 
@@ -368,6 +373,10 @@ public class BrokerCluster implements Cluster {
             String data = new String(childData.getData());
             if (Strings.isNotEmpty(data)) {
                 BrokerMessageHandler.TopicNodeData topicNodeData = GsonUtils.fromJson(data, BrokerMessageHandler.TopicNodeData.class);
+                if (topicNodeData.getCurrentMsgSequence() <= 0) {
+                    return;
+                }
+
                 // 向Broker发送数据请求
                 InetSocketAddress socketAddress = Utils.stringCastSocketAddress(topicNodeData.getBrokerServer(), ":");
                 BrokerNode brokerNode = new BrokerNode(topicNodeData.getBrokerId(), socketAddress);
@@ -377,7 +386,7 @@ public class BrokerCluster implements Cluster {
                 long startSequence = getTopicConsumeMinSequence(topicNodeData.getTopic(), topicConsumeRecord);
                 long endSequence = topicNodeData.getCurrentMsgSequence();
                 MsgRequest request = new MsgRequest(topicNodeData.getTopic(), startSequence, endSequence);
-                MQMessage mqMessage = new MQMessage(MQMessageRequest, MQCluster, request);
+                MQMessage mqMessage = new MQMessage(MQMsgRequest, MQCluster, request);
                 transport.writeAndFlush(mqMessage);
                 pool.returnObject(transport);
             }

@@ -33,6 +33,7 @@ public class MemoryMsgStore implements MsgStore<MsgContent, String> {
         }
         String content = new String(msg.getMsgBody());
         msgData.put(msg.getBrokerMsgSequence(), content);
+        msgDataSource.put(topic, msgData);
     }
 
     @Override

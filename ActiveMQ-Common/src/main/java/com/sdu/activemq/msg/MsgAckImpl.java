@@ -1,13 +1,11 @@
 package com.sdu.activemq.msg;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.ToString;
+import lombok.*;
 
 /**
  * @author hanhan.zhang
  * */
+@NoArgsConstructor
 @AllArgsConstructor
 @ToString
 public class MsgAckImpl implements MsgAck {

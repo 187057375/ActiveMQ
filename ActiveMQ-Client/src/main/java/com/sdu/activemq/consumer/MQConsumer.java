@@ -1,14 +1,13 @@
-package com.sdu.activemq.producer;
+package com.sdu.activemq.consumer;
 
 import com.google.common.collect.Maps;
-import com.sdu.activemq.msg.MQMessage;
-import com.sdu.activemq.msg.MsgAckImpl;
-import com.sdu.activemq.msg.MsgContent;
+import com.sdu.activemq.msg.*;
 import com.sdu.activemq.network.client.NettyClient;
 import com.sdu.activemq.network.client.NettyClientConfig;
 import com.sdu.activemq.network.serialize.MessageObjectDecoder;
 import com.sdu.activemq.network.serialize.MessageObjectEncoder;
 import com.sdu.activemq.network.serialize.kryo.KryoSerializer;
+import com.sdu.activemq.producer.MQProducer;
 import com.sdu.activemq.util.Utils;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -18,18 +17,16 @@ import io.netty.channel.socket.SocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
-import static com.sdu.activemq.msg.MQMsgSource.ActiveMQProducer;
-import static com.sdu.activemq.msg.MQMsgType.MQMsgStore;
-import static com.sdu.activemq.msg.MQMsgType.MQMsgStoreAck;
+import static com.sdu.activemq.msg.MQMsgSource.ActiveMQConsumer;
+import static com.sdu.activemq.msg.MQMsgType.MQSubscribe;
 
 /**
- *
  * @author hanhan.zhang
  * */
-public class MQProducer {
+public class MQConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MQProducer.class);
 
@@ -37,7 +34,7 @@ public class MQProducer {
 
     private NettyClient nettyClient;
 
-    public MQProducer(String clusterAddress) {
+    public MQConsumer(String clusterAddress) {
         this.clusterAddress = clusterAddress;
     }
 
@@ -62,7 +59,7 @@ public class MQProducer {
                 KryoSerializer serializer = new KryoSerializer(MQMessage.class);
                 ch.pipeline().addLast(new MessageObjectDecoder(serializer));
                 ch.pipeline().addLast(new MessageObjectEncoder(serializer));
-                ch.pipeline().addLast(new ProducerMsgHandler());
+                ch.pipeline().addLast(new MsgConsumerHandler());
             }
         });
 
@@ -75,34 +72,52 @@ public class MQProducer {
         }
     }
 
-    private class ProducerMsgHandler extends ChannelInboundHandlerAdapter {
-
+    private class MsgConsumerHandler extends ChannelInboundHandlerAdapter {
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            ctx.channel().eventLoop().scheduleAtFixedRate(() -> {
-                String address = "";
-                String content = "MQ msg content : " + Utils.generateUUID();
-                MsgContent msgContent = new MsgContent("MQTest", address, content.getBytes(), System.currentTimeMillis());
-                MQMessage msg = new MQMessage(MQMsgStore, ActiveMQProducer, msgContent);
-                ctx.writeAndFlush(msg);
-            }, 2, 2, TimeUnit.SECONDS);
+            MsgSubscribe subscribe = new MsgSubscribe("MQTest", "MQTestGroup");
+            MQMessage mqMessage = new MQMessage(MQSubscribe, ActiveMQConsumer, subscribe);
+            ctx.writeAndFlush(mqMessage);
         }
 
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-            if (msg.getClass() == MQMessage.class) {
-                MQMessage mqMessage = (MQMessage) msg;
-                if (mqMessage.getMsgType() == MQMsgStoreAck) {
-                    MsgAckImpl msgAck = (MsgAckImpl) mqMessage.getMsg();
-                    LOGGER.info("MQ msg store ack, brokerSequence : {}", msgAck.getBrokerMsgSequence());
-                }
+            if (msg.getClass() != MQMessage.class) {
+                return;
             }
+
+            MQMessage mqMessage = (MQMessage) msg;
+            MQMsgType type = mqMessage.getMsgType();
+            switch (type) {
+                case MQSubscribeAck:
+                    doMsgSubscribeAck(mqMessage);
+                    break;
+                case MQMsgResponse:
+                    doMsgConsume(mqMessage);
+                    break;
+            }
+        }
+
+
+        private void doMsgSubscribeAck(MQMessage mqMessage) {
+            MsgSubscribeAck subscribeAck = (MsgSubscribeAck) mqMessage.getMsg();
+            LOGGER.info("consume subscribe topic : {}, status : {}", subscribeAck.getTopic(), subscribeAck.getStatus());
+        }
+
+        private void doMsgConsume(MQMessage mqMessage) {
+            MsgResponse response = (MsgResponse) mqMessage.getMsg();
+            Long start = response.getStart();
+            Long end = response.getEnd();
+            int size = end.intValue() - start.intValue();
+            int newStart = response.getMsgList().size() - size;
+            List<String> msgList = response.getMsgList().subList(newStart, size + 1);
+            LOGGER.info("consume msg : {}", msgList);
         }
     }
 
     public static void main(String[] args) {
         String clusterAddress = "127.0.0.1:6712";
-        MQProducer producer = new MQProducer(clusterAddress);
-        producer.start();
+        MQConsumer consumer = new MQConsumer(clusterAddress);
+        consumer.start();
     }
 }

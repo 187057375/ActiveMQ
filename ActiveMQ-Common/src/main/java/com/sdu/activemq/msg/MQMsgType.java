@@ -8,10 +8,10 @@ package com.sdu.activemq.msg;
 public enum MQMsgType {
 
     MQHeartBeat(0, "心跳"),
-    MQMessageRequest(1, "消息请求"),
-    MQMessageResponse(2, "消息响应"),
-    MQMessageStore(3, "消息存储"),
-    MQMessageStoreAck(4, "消息存储确认"),
+    MQMsgRequest(1, "消息请求"),
+    MQMsgResponse(2, "消息响应"),
+    MQMsgStore(3, "消息存储"),
+    MQMsgStoreAck(4, "消息存储确认"),
     MQSubscribe(5, "消息订阅"),
     MQSubscribeAck(6, "消息订阅确认"),
     MQHeartBeatAck(7, "心跳确认");

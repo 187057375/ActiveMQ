@@ -83,7 +83,7 @@ public class BrokerTransport {
             protected void initChannel(SocketChannel ch) throws Exception {
                 // 心跳[1秒内若是无数据读取, 则发送心跳]
                 KryoSerializer serializer = new KryoSerializer(MQMessage.class);
-                ch.pipeline().addLast(new IdleStateHandler(1, 4, 0, TimeUnit.SECONDS));
+                ch.pipeline().addLast(new IdleStateHandler(1, 4, 0, TimeUnit.MINUTES));
                 ch.pipeline().addLast(new MessageObjectDecoder(serializer));
                 ch.pipeline().addLast(new MessageObjectEncoder(serializer));
                 ch.pipeline().addLast(new HeartBeatHandler());

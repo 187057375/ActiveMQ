@@ -9,6 +9,6 @@ public class Const {
 
     public static final String ZK_TOPIC_PATH = "/activeMQ/topic";
 
-    public static final String ZK_TOPIC_CONSUME = "/activeMQ/consume/topic";
+    public static final String ZK_MQ_LOCK_PATH = "/activeMQ/lock";
 
 }

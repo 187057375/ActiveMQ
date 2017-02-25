@@ -26,6 +26,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static com.sdu.activemq.msg.MQMsgSource.MQBroker;
 import static com.sdu.activemq.msg.MQMsgType.MQHeartBeatAck;
+import static com.sdu.activemq.msg.MQMsgType.MQMsgResponse;
+import static com.sdu.activemq.msg.MQMsgType.MQMsgStoreAck;
 
 /**
  * MQ消息处理:
@@ -62,7 +64,7 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
         MessageInterceptor interceptor = new MessageInterceptorImpl();
         MessageInvoker invoker = new MessageInvoker(handler, interceptor, "storeMessage");
         Class<?>[] interceptorClazz = new Class[]{MessageHandler.class};
-        handler = (MessageHandler) Proxy.newProxyInstance(MessageHandlerImpl.class.getClassLoader(), interceptorClazz, invoker);
+        handler = (MessageHandler) Proxy.newProxyInstance(MessageHandler.class.getClassLoader(), interceptorClazz, invoker);
     }
 
     @Override
@@ -76,10 +78,10 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
             case MQHeartBeat:
                 doHeartbeat(ctx, mqMessage);
                 break;
-            case MQMessageStore:
+            case MQMsgStore:
                 doMsgStore(ctx, mqMessage);
                 break;
-            case MQMessageRequest:
+            case MQMsgRequest:
                 doMsgConsume(ctx, mqMessage);
                 break;
         }
@@ -133,9 +135,11 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
             MsgContent msgContent = (MsgContent) msg.getMsg();
             msgContent.setBrokerMsgSequence(msgSequence);
             msgStore.store(msgContent);
+            LOGGER.info("broker store msg success, producer address : {}, msgId : {}", msgContent.getProducerAddress(), msg.getMsgId());
+
             // 消息确认
             MsgAckImpl ackMessage = new MsgAckImpl(msgContent.getTopic(), msg.getMsgId(), MsgAckStatus.SUCCESS, msgSequence, msgContent.getProducerAddress());
-            MQMessage mqMessage = new MQMessage(MQMsgType.MQMessageStoreAck, MQMsgSource.MQBroker, ackMessage);
+            MQMessage mqMessage = new MQMessage(MQMsgStoreAck, MQBroker, ackMessage);
             ctx.writeAndFlush(mqMessage);
         }
 
@@ -147,36 +151,41 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
             long end = request.getEndSequence();
             List<String> msgList = msgStore.getMsg(topic, start, end);
 
+            LOGGER.info("broker push msg, fromSequence : {}, toSequence : {}", start, end);
             // 响应客户端
             MsgResponse response = new MsgResponse(topic, start, end, msgList);
-            MQMessage mqMessage = new MQMessage(MQMsgType.MQMessageResponse, MQMsgSource.MQBroker, response);
+            MQMessage mqMessage = new MQMessage(MQMsgResponse, MQBroker, response);
             ctx.writeAndFlush(mqMessage);
         }
 
     }
 
     /**
-     * MQ消息处理拦截器
+     * MQ消息处理拦截器[少Zk分布式锁控制]
      * */
     private class MessageInterceptorImpl implements MessageInterceptor {
 
         @Override
         public void beforeProcess(Object msg) throws Exception {
-            if (msg.getClass() != MsgContent.class) {
-                return;
-            }
-            MsgContent message = (MsgContent) msg;
-            if (!created.get()) {
-                String brokerId = brokerServer.getBrokerId();
-                String path = ZkUtils.brokerTopicNode(brokerId, message.getTopic());
-                LOGGER.debug("check zk node {} .", path);
-                if (!checkExist(path)) {
-                    InetSocketAddress socketAddress = brokerServer.getNettyServer().getSocketAddress();
-                    TopicNodeData topicNodeData = new TopicNodeData(message.getTopic(), Utils.socketAddressCastString(socketAddress), brokerId, 0);
-                    String data = GsonUtils.toJson(topicNodeData);
-                    String nodePath = brokerServer.getZkClientContext().createNode(path, data.getBytes());
-                    if (!Strings.isNullOrEmpty(nodePath)) {
-                        created.set(true);
+            synchronized (this) {
+                if (msg.getClass() != MQMessage.class) {
+                    return;
+                }
+                MQMessage mqMessage = (MQMessage) msg;
+                MsgContent message = (MsgContent) mqMessage.getMsg();
+                if (!created.get()) {
+                    String brokerId = brokerServer.getBrokerId();
+                    String path = ZkUtils.brokerTopicNode(brokerId, message.getTopic());
+                    LOGGER.debug("check zk node {} .", path);
+
+                    if (!checkExist(path)) {
+                        InetSocketAddress socketAddress = brokerServer.getNettyServer().getSocketAddress();
+                        TopicNodeData topicNodeData = new TopicNodeData(message.getTopic(), Utils.socketAddressCastString(socketAddress), brokerId, 0);
+                        String data = GsonUtils.toJson(topicNodeData);
+                        String nodePath = brokerServer.getZkClientContext().createNode(path, data.getBytes());
+                        if (!Strings.isNullOrEmpty(nodePath)) {
+                            created.set(true);
+                        }
                     }
                 }
             }
@@ -189,10 +198,11 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
 
         @Override
         public void success(Object msg) throws Exception {
-            if (msg.getClass() != MsgContent.class) {
+            if (msg.getClass() != MQMessage.class) {
                 return;
             }
-            MsgContent message = (MsgContent) msg;
+            MQMessage mqMessage = (MQMessage) msg;
+            MsgContent message = (MsgContent) mqMessage.getMsg();
             // 更新[/activeMQ/topic/topicName/brokerId]消息
             String brokeId = brokerServer.getBrokerId();
             String path = ZkUtils.brokerTopicNode(brokeId, message.getTopic());
