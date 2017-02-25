@@ -35,10 +35,6 @@ public class BrokerConfig {
 
     private MQConfig mqConfig;
 
-    public BrokerConfig(String config) throws IOException {
-        mqConfig = new MQConfig(config);
-    }
-
     public BrokerConfig(MQConfig mqConfig) {
         this.mqConfig = mqConfig;
     }

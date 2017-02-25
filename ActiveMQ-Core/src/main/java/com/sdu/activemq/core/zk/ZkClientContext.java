@@ -1,9 +1,7 @@
 package com.sdu.activemq.core.zk;
 
-import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
 import com.sdu.activemq.core.MQConfig;
-import com.sdu.activemq.utils.Utils;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.framework.imps.CuratorFrameworkState;
@@ -16,7 +14,8 @@ import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**

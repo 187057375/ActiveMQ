@@ -44,7 +44,7 @@ public class NettyServer {
         ServerBootstrap bootstrap = new ServerBootstrap();
         bootstrap.group(bossGroup, workerGroup)
                  .channel(NettyUtils.getServerChannelClass(config.isEPoll()))
-                 .childHandler(config.getChannelHandler());
+                 .childHandler(config.getChildChannelHandler());
 
         if (config.getOptions() != null) {
             for (Map.Entry<ChannelOption, Object> entry : config.getOptions().entrySet()) {
@@ -75,6 +75,13 @@ public class NettyServer {
 
     public InetSocketAddress getSocketAddress() {
         return socketAddress;
+    }
+
+    public void blockUntilStarted(long seconds) throws InterruptedException {
+        synchronized (this) {
+            long maxWaitTimeMs = TimeUnit.MILLISECONDS.convert(seconds, TimeUnit.SECONDS);
+            wait(maxWaitTimeMs);
+        }
     }
 
     public boolean isServing() {

@@ -56,8 +56,6 @@ public class BrokerServer implements Server {
     @Getter
     private ZkClientContext zkClientContext;
 
-    private KryoSerializer serialize;
-
     @Getter
     private ExecutorService executorService;
 
@@ -69,9 +67,12 @@ public class BrokerServer implements Server {
 
     @Override
     public void start() throws Exception {
-        MessageObjectDecoder decoder = new MessageObjectDecoder(serialize);
-        MessageObjectEncoder encoder = new MessageObjectEncoder(serialize);
+        KryoSerializer kryoSerializer = new KryoSerializer(MQMessage.class);
+        MessageObjectDecoder decoder = new MessageObjectDecoder(kryoSerializer);
+        MessageObjectEncoder encoder = new MessageObjectEncoder(kryoSerializer);
         doStartServer(decoder, encoder);
+        // JVM退出钩子
+        Runtime.getRuntime().addShutdownHook(new ShutdownHook());
     }
 
     private void doStartServer(MessageObjectDecoder decoder, MessageObjectEncoder encoder) throws Exception {
@@ -88,9 +89,6 @@ public class BrokerServer implements Server {
 
         //
         BrokerMessageHandler brokerMessageHandler = new BrokerMessageHandler(this);
-
-        // 序列化
-        serialize = new KryoSerializer(MQMessage.class);
 
         // Netty Serve配置
         NettyServerConfig nettyServerConfig = new NettyServerConfig();
@@ -128,6 +126,8 @@ public class BrokerServer implements Server {
 
         nettyServer = new NettyServer(nettyServerConfig);
         nettyServer.start();
+
+        nettyServer.blockUntilStarted(2);
 
         if (!nettyServer.isServing()) {
             throw new IllegalStateException("broker server start failed.");
@@ -168,8 +168,14 @@ public class BrokerServer implements Server {
         }
     }
 
-    public static class BrokerNodeData {
-
-
+    private class ShutdownHook extends Thread {
+        @Override
+        public void run() {
+            try {
+                shutdown();
+            } catch (Exception e) {
+                //
+            }
+        }
     }
 }

@@ -24,6 +24,8 @@ import org.apache.curator.framework.recipes.cache.ChildData;
 import org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent;
 import org.apache.curator.framework.recipes.cache.PathChildrenCacheListener;
 import org.apache.logging.log4j.util.Strings;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.util.*;
@@ -47,6 +49,8 @@ import static com.sdu.activemq.utils.Const.ZK_BROKER_PATH;
  * @author hanhan.zhang
  * */
 public class BrokerCluster implements Cluster {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(BrokerCluster.class);
 
     // Broker链接表[每个Broker拥有一个客户端连接池]
     private ConcurrentHashMap<BrokerNode, BrokerTransportPool> connectors;
@@ -95,7 +99,7 @@ public class BrokerCluster implements Cluster {
         startClusterServer();
     }
 
-    private void startClusterServer() {
+    private void startClusterServer() throws Exception {
 
         // Netty Serve配置
         NettyServerConfig nettyServerConfig = new NettyServerConfig();
@@ -133,9 +137,16 @@ public class BrokerCluster implements Cluster {
         nettyServer = new NettyServer(nettyServerConfig);
         nettyServer.start();
 
+        nettyServer.blockUntilStarted(2);
+
         if (!nettyServer.isServing()) {
             throw new IllegalStateException("broker server start failed.");
         }
+
+        LOGGER.info("broker cluster start success, bind address : {}", Utils.socketAddressCastString(nettyServer.getSocketAddress()));
+
+        // JVM关闭钩子
+        Runtime.getRuntime().addShutdownHook(new ShutdownHook());
     }
 
 
@@ -440,6 +451,17 @@ public class BrokerCluster implements Cluster {
             InetSocketAddress socketAddress = Utils.stringCastSocketAddress(brokerAddress, ":");
             BrokerNode node = new BrokerNode(UUID, socketAddress);
             connectors.remove(node);
+        }
+    }
+
+    private class ShutdownHook extends Thread {
+        @Override
+        public void run() {
+            try {
+                BrokerCluster.this.destroy();
+            } catch (Exception e) {
+                // ignore
+            }
         }
     }
 }

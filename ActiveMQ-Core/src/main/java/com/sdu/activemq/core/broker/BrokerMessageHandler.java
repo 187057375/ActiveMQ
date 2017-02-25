@@ -61,8 +61,8 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
         handler = new MessageHandlerImpl();
         MessageInterceptor interceptor = new MessageInterceptorImpl();
         MessageInvoker invoker = new MessageInvoker(handler, interceptor, "storeMessage");
-        Class<?>[] interceptorClazz = new Class[]{MessageHandlerImpl.class};
-        handler = (MessageHandlerImpl) Proxy.newProxyInstance(MessageHandlerImpl.class.getClassLoader(), interceptorClazz, invoker);
+        Class<?>[] interceptorClazz = new Class[]{MessageHandler.class};
+        handler = (MessageHandler) Proxy.newProxyInstance(MessageHandlerImpl.class.getClassLoader(), interceptorClazz, invoker);
     }
 
     @Override

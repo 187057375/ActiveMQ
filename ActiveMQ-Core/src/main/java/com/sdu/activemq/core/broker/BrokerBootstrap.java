@@ -1,18 +1,16 @@
 package com.sdu.activemq.core.broker;
 
-import java.io.IOException;
+import com.sdu.activemq.core.MQConfig;
 
 /**
  * @author hanhan.zhang
  * */
 public class BrokerBootstrap {
 
-    public static void start(String config) throws IOException {
-
-    }
-
-    public static void main(String[] args) {
-
+    public static void main(String[] args) throws Exception {
+        MQConfig mqConfig = new MQConfig("broker.cfg");
+        BrokerServer brokerServer = new BrokerServer(mqConfig);
+        brokerServer.start();
     }
 
 }
