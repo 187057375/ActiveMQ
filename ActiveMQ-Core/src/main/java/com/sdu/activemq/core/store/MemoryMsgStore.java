@@ -1,20 +1,19 @@
 package com.sdu.activemq.core.store;
 
-import com.google.common.collect.Lists;
 import com.sdu.activemq.msg.MsgContent;
 import org.apache.logging.log4j.util.Strings;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * @author hanhan.zhang
  * */
 public class MemoryMsgStore implements MsgStore<MsgContent, String> {
 
-    private ConcurrentHashMap<String, Map<Long, String>> msgDataSource;
+    // 消息存储使用TreeMap, 根据key快速获取数据
+    private ConcurrentHashMap<String, SortedMap<Long, String>> msgDataSource;
 
     public MemoryMsgStore() {
         this.msgDataSource = new ConcurrentHashMap<>();
@@ -27,10 +26,11 @@ public class MemoryMsgStore implements MsgStore<MsgContent, String> {
             return;
         }
 
-        Map<Long, String> msgData = msgDataSource.get(topic);
+        SortedMap<Long, String> msgData = msgDataSource.get(topic);
         if (msgData == null) {
-            msgData = new ConcurrentHashMap<>();
+            msgData = Collections.synchronizedSortedMap(new TreeMap<>());
         }
+
         String content = new String(msg.getMsgBody());
         msgData.put(msg.getBrokerMsgSequence(), content);
         msgDataSource.put(topic, msgData);
@@ -38,19 +38,14 @@ public class MemoryMsgStore implements MsgStore<MsgContent, String> {
 
     @Override
     public List<String> getMsg(String topic, long startSequence, long endSequence) {
-        Map<Long, String> msgMap = msgDataSource.get(topic);
+        SortedMap<Long, String> msgMap = msgDataSource.get(topic);
 
         if (msgMap == null) {
             return Collections.emptyList();
         }
 
-        List<String> msgList = Lists.newLinkedList();
-        msgMap.forEach((sequence, msg) -> {
-            if (sequence >= startSequence && sequence <= endSequence) {
-                msgList.add(msg);
-            }
-        });
+        SortedMap<Long, String> subMap = msgMap.subMap(startSequence, endSequence);
 
-        return msgList;
+        return subMap.entrySet().stream().map(Map.Entry::getValue).collect(Collectors.toList());
     }
 }

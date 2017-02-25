@@ -9,4 +9,6 @@ public interface Server {
 
     public void shutdown() throws Exception;
 
+    public String getServerAddress();
+
 }

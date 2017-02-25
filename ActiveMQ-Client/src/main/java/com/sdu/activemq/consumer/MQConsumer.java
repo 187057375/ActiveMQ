@@ -108,9 +108,7 @@ public class MQConsumer {
             MsgResponse response = (MsgResponse) mqMessage.getMsg();
             Long start = response.getStart();
             Long end = response.getEnd();
-            int size = end.intValue() - start.intValue();
-            int newStart = response.getMsgList().size() - size;
-            List<String> msgList = response.getMsgList().subList(newStart, size + 1);
+            List<String> msgList = response.getMsgList().subList(start.intValue(), end.intValue());
             LOGGER.info("consume msg : {}", msgList);
         }
     }

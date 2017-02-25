@@ -142,6 +142,10 @@ public class ZkClientContext {
         }
     }
 
+    public String createNode(String path, String data) throws Exception {
+       return createNode(path, data.getBytes());
+    }
+
     public String createNode(String path, byte []data) throws Exception {
         valid();
         return framework.create().creatingParentsIfNeeded().forPath(path, data);

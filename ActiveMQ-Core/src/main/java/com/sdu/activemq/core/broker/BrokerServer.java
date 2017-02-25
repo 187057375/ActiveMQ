@@ -10,6 +10,7 @@ import com.sdu.activemq.network.serialize.MessageObjectEncoder;
 import com.sdu.activemq.network.serialize.kryo.KryoSerializer;
 import com.sdu.activemq.network.server.NettyServer;
 import com.sdu.activemq.network.server.NettyServerConfig;
+import com.sdu.activemq.utils.GsonUtils;
 import com.sdu.activemq.utils.Utils;
 import com.sdu.activemq.utils.ZkUtils;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -18,7 +19,10 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -141,12 +145,10 @@ public class BrokerServer implements Server {
         zkClientContext.start();
         // 注册节点
         if (zkClientContext.isServing()) {
-            InetSocketAddress socketAddress = nettyServer.getSocketAddress();
-            String host = socketAddress.getHostName();
-            int port = socketAddress.getPort();
-            String broker = host + ":" + port;
             brokerId = Utils.generateUUID();
-            String path = zkClientContext.createNode(ZkUtils.brokerServerNode(brokerId), broker.getBytes());
+            String brokerAddress = getServerAddress();
+            BrokerZkNodeData zkNodeData = new BrokerZkNodeData(brokerAddress, brokerId);
+            String path = zkClientContext.createNode(ZkUtils.brokerServerNode(brokerAddress), GsonUtils.toJson(zkNodeData));
             LOGGER.info("broker server create zk node : {}", path);
         }
     }
@@ -169,6 +171,11 @@ public class BrokerServer implements Server {
         }
     }
 
+    @Override
+    public String getServerAddress() {
+        return Utils.socketAddressCastString(nettyServer.getSocketAddress());
+    }
+
     private class ShutdownHook extends Thread {
         @Override
         public void run() {
@@ -178,5 +185,17 @@ public class BrokerServer implements Server {
                 //
             }
         }
+    }
+
+    @Setter
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class BrokerZkNodeData {
+
+        private String brokerAddress;
+
+        private String brokerId;
+
     }
 }

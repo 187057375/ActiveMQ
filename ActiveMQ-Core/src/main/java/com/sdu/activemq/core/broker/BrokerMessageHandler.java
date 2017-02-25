@@ -161,22 +161,26 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
     }
 
     /**
-     * MQ消息处理拦截器[少Zk分布式锁控制]
+     * MQ消息处理拦截器
      * */
     private class MessageInterceptorImpl implements MessageInterceptor {
 
         @Override
         public void beforeProcess(Object msg) throws Exception {
+            if (msg.getClass() != MQMessage.class) {
+                return;
+            }
+
+            if (created.get()) {
+                return;
+            }
+
             synchronized (this) {
-                if (msg.getClass() != MQMessage.class) {
-                    return;
-                }
                 MQMessage mqMessage = (MQMessage) msg;
                 MsgContent message = (MsgContent) mqMessage.getMsg();
                 if (!created.get()) {
                     String brokerId = brokerServer.getBrokerId();
-                    String path = ZkUtils.brokerTopicNode(brokerId, message.getTopic());
-                    LOGGER.debug("check zk node {} .", path);
+                    String path = ZkUtils.brokerTopicNode(brokerServer.getServerAddress(), message.getTopic());
 
                     if (!checkExist(path)) {
                         InetSocketAddress socketAddress = brokerServer.getNettyServer().getSocketAddress();
@@ -205,7 +209,7 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
             MsgContent message = (MsgContent) mqMessage.getMsg();
             // 更新[/activeMQ/topic/topicName/brokerId]消息
             String brokeId = brokerServer.getBrokerId();
-            String path = ZkUtils.brokerTopicNode(brokeId, message.getTopic());
+            String path = ZkUtils.brokerTopicNode(brokerServer.getServerAddress(), message.getTopic());
             InetSocketAddress socketAddress = brokerServer.getNettyServer().getSocketAddress();
             TopicNodeData topicNodeData = new TopicNodeData(message.getTopic(), Utils.socketAddressCastString(socketAddress), brokeId, message.getBrokerMsgSequence());
             String data = GsonUtils.toJson(topicNodeData);

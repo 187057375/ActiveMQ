@@ -3,6 +3,7 @@ package com.sdu.activemq.core.cluster;
 import com.google.common.collect.Maps;
 import com.sdu.activemq.core.MQConfig;
 import com.sdu.activemq.core.broker.BrokerMessageHandler;
+import com.sdu.activemq.core.broker.BrokerServer;
 import com.sdu.activemq.core.broker.client.BrokerTransport;
 import com.sdu.activemq.core.broker.client.BrokerTransportPool;
 import com.sdu.activemq.core.zk.ZkClientContext;
@@ -251,8 +252,8 @@ public class BrokerCluster implements Cluster {
                 brokerNode = loadBalance();
             } else {
                 // 暂且只存储在一个Broker服务
-                String brokerId = brokerServerList.get(0);
-                String brokerZkPath = ZkUtils.brokerTopicNode(msgContent.getTopic(), brokerId);
+                String brokerAddress = brokerServerList.get(0);
+                String brokerZkPath = ZkUtils.brokerTopicNode(msgContent.getTopic(), brokerAddress);
                 byte []dataByte = zkClientContext.getNodeData(brokerZkPath);
                 String data = new String(dataByte);
                 if (Strings.isNotEmpty(data)) {
@@ -318,7 +319,7 @@ public class BrokerCluster implements Cluster {
             MsgResponse response = (MsgResponse) msg.getMsg();
             String topic = response.getTopic();
 
-            // 消费位置
+            // 消费位置[key = 消费组名, value = 消费位置]
             Map<String, AtomicLong> consumeRecord = topicConsumeRecord.get(topic);
 
             // 推送'Consumer'消费端
@@ -331,13 +332,14 @@ public class BrokerCluster implements Cluster {
             consumeClient.forEach((group, channels) -> {
                 Collections.shuffle(channels);
                 Channel channel = channels.get(0);
-                // 消费组消费位置
-                AtomicLong position = consumeRecord.get(group);
-                long start = position.get();
-                position.set(start + response.getEnd() - response.getStart());
-                response.setStart(start);
 
-                LOGGER.info("Consumer group : {}, consume msg from {} to {} sequence", group, start, response.getEnd());
+                // 更改消费组消费位置
+                AtomicLong position = consumeRecord.get(group);
+                long start = position.getAndAdd(response.getEnd());
+
+                //
+                response.setStart(0);
+                response.setEnd(response.getEnd() - start);
 
                 channel.writeAndFlush(msg);
             });
@@ -373,15 +375,23 @@ public class BrokerCluster implements Cluster {
             String data = new String(childData.getData());
             if (Strings.isNotEmpty(data)) {
                 BrokerMessageHandler.TopicNodeData topicNodeData = GsonUtils.fromJson(data, BrokerMessageHandler.TopicNodeData.class);
+
                 if (topicNodeData.getCurrentMsgSequence() <= 0) {
                     return;
                 }
 
-                // 向Broker发送数据请求
+                String topic = topicNodeData.getTopic();
+                Map<String, List<Channel>> consumeClient = topicConsumeClientRecord.get(topic);
+                if (consumeClient == null || consumeClient.isEmpty()) {
+                    return;
+                }
+
+                // Broker发送消息请求
                 InetSocketAddress socketAddress = Utils.stringCastSocketAddress(topicNodeData.getBrokerServer(), ":");
                 BrokerNode brokerNode = new BrokerNode(topicNodeData.getBrokerId(), socketAddress);
                 BrokerTransportPool pool = connectors.get(brokerNode);
                 BrokerTransport transport = pool.borrowObject();
+
                 //
                 long startSequence = getTopicConsumeMinSequence(topicNodeData.getTopic(), topicConsumeRecord);
                 long endSequence = topicNodeData.getCurrentMsgSequence();
@@ -400,7 +410,17 @@ public class BrokerCluster implements Cluster {
             if (consumeRecord == null) {
                 return 0L;
             }
-            return consumeRecord.values().stream().min((o1, o2) -> (int) (o1.get() - o2.get())).get().get();
+
+            long minSequence = Long.MAX_VALUE;
+
+            for (Map.Entry<String, AtomicLong> entry : consumeRecord.entrySet()) {
+                long newMinSequence = entry.getValue().get();
+                if (newMinSequence <= minSequence) {
+                    minSequence = newMinSequence;
+                }
+            }
+
+            return minSequence;
         }
     }
 
@@ -434,26 +454,25 @@ public class BrokerCluster implements Cluster {
          * Broker服务节点更新
          * */
         private void updateBroker(ChildData childData) throws Exception {
-            String path = childData.getPath();
-            // Broker唯一标识
-            String UUID = path.substring(ZK_BROKER_PATH.length() + 1);
-            // Broker服务地址
-            String brokerAddress = new String(childData.getData());
-            InetSocketAddress socketAddress = Utils.stringCastSocketAddress(brokerAddress, ":");
+            if (childData == null || childData.getData() == null || childData.getData().length == 0) {
+                return;
+            }
+            BrokerServer.BrokerZkNodeData zkNodeData = GsonUtils.fromJson(new String(childData.getData()), BrokerServer.BrokerZkNodeData.class);
 
-            LOGGER.info("Broker server node[{}] online .", brokerAddress);
+            LOGGER.info("Broker server node[{}] online .", zkNodeData.getBrokerAddress());
 
-            BrokerNode node = new BrokerNode(UUID, socketAddress);
+            InetSocketAddress socketAddress = Utils.stringCastSocketAddress(zkNodeData.getBrokerAddress(), ":");
+            BrokerNode node = new BrokerNode(zkNodeData.getBrokerId(), socketAddress);
             BrokerTransportPool pool = connectors.get(node);
             if (pool == null) {
-                pool = new BrokerTransportPool(brokerAddress, zkConfig.getMqConfig(), new BrokerMsgHandler());
+                pool = new BrokerTransportPool(zkNodeData.getBrokerAddress(), zkConfig.getMqConfig(), new BrokerMsgHandler());
                 connectors.put(node, pool);
             } else {
                 String address = pool.getBrokerAddress();
-                if (!address.equals(brokerAddress)) {
+                if (!address.equals(zkNodeData.getBrokerAddress())) {
                     // Broker Server服务地址 ,l发生变化, 需重新创建连接
                     pool.destroy();
-                    pool = new BrokerTransportPool(brokerAddress, zkConfig.getMqConfig(), new BrokerMsgHandler());
+                    pool = new BrokerTransportPool(zkNodeData.getBrokerAddress(), zkConfig.getMqConfig(), new BrokerMsgHandler());
                     connectors.put(node, pool);
                 }
             }
