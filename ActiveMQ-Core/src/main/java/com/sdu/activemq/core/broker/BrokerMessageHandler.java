@@ -106,8 +106,8 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
      * 客户端心跳处理
      * */
     private void doHeartbeat(ChannelHandlerContext ctx, MQMessage msg) {
-        MsgHeartBeat heartBeatMsg = (MsgHeartBeat) msg.getMsg();
-        LOGGER.debug("broker server receive client[] heartbeat, msgId : {} .", heartBeatMsg.getClientAddress(), msg.getMsgId());
+        String clientAddress = Utils.socketAddressCastString((InetSocketAddress) ctx.channel().remoteAddress());
+        LOGGER.debug("broker server receive client[{}] heartbeat, msgId : {} .", clientAddress, msg.getMsgId());
         //
         MQMessage mqMessage = new MQMessage(MQHeartBeatAck, MQBroker, new MsgHeartBeat());
         ctx.writeAndFlush(mqMessage);

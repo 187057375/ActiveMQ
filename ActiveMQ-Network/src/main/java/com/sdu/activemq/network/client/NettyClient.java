@@ -22,11 +22,7 @@ public class NettyClient {
 
     private NettyClientConfig config;
 
-    private InetSocketAddress localSocketAddress;
-
-    private InetSocketAddress remoteSocketAddress;
-
-    private AtomicBoolean start = new AtomicBoolean(false);
+    private AtomicBoolean started = new AtomicBoolean(false);
 
     public NettyClient(NettyClientConfig config) {
         this.config = config;
@@ -36,7 +32,8 @@ public class NettyClient {
         eventLoopGroup = NettyUtils.createEventLoopGroup(config.isEPool(), config.getSocketThreads(), config.getClientThreadFactory());
 
         Bootstrap bootstrap = new Bootstrap();
-        bootstrap.channel(NettyUtils.getClientChannelClass(config.isEPool()))
+        bootstrap.group(eventLoopGroup)
+                 .channel(NettyUtils.getClientChannelClass(config.isEPool()))
                  .handler(config.getChannelHandler());
 
         if (config.getOptions() != null) {
@@ -50,20 +47,10 @@ public class NettyClient {
         channelFuture.addListeners(new ChannelFutureListener() {
             @Override
             public void operationComplete(ChannelFuture future) throws Exception {
-                start.set(true);
+                started.set(true);
                 channel = future.channel();
-                localSocketAddress = (InetSocketAddress) channel.localAddress();
-                remoteSocketAddress = (InetSocketAddress) channel.remoteAddress();
             }
         });
-    }
-
-    public InetSocketAddress getLocalSocketAddress() {
-        return localSocketAddress;
-    }
-
-    public InetSocketAddress getRemoteSocketAddress() {
-        return remoteSocketAddress;
     }
 
     public ChannelFuture writeAndFlush(Object object) {
@@ -74,11 +61,11 @@ public class NettyClient {
     }
 
     public boolean isStarted() {
-        return start.get();
+        return started.get();
     }
 
     public void stop(int await, TimeUnit unit) throws InterruptedException {
-        start.set(false);
+        started.set(false);
         if (channel != null) {
             channel.closeFuture().sync();
         }

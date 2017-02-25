@@ -39,7 +39,7 @@ public class BrokerTransportPool extends GenericObjectPool<BrokerTransport> {
         int maxWait = mqConfig.getInt(BROKER_CONNECT_MAX_AWAIT, 1000);
         int sessionTimeOut = mqConfig.getInt(BROKER_CONNECT_SESSION_TIMEOUT, 5000);
 
-        LOGGER.info("BrokerTransportPool[maxActive=%d,minIdle=%d,maxIdle=%d,maxWait=%d,sessionTimeOut=%d]", maxActive, minIdle, maxIdle, maxWait, sessionTimeOut);
+        LOGGER.info("BrokerTransportPool[maxActive={},minIdle={},maxIdle={},maxWait={},sessionTimeOut={}]", maxActive, minIdle, maxIdle, maxWait, sessionTimeOut);
 
         this.setMaxActive(maxActive);
         this.setMaxIdle(maxIdle);

@@ -37,6 +37,7 @@ import static com.sdu.activemq.msg.MQMsgSource.MQCluster;
 import static com.sdu.activemq.msg.MQMsgType.MQMessageRequest;
 import static com.sdu.activemq.msg.MQMsgType.MQSubscribeAck;
 import static com.sdu.activemq.utils.Const.ZK_BROKER_PATH;
+import static com.sdu.activemq.utils.Const.ZK_TOPIC_PATH;
 
 /**
  * BrokerCluster职责:
@@ -93,7 +94,7 @@ public class BrokerCluster implements Cluster {
         // Broker Server上线/下线监控
         zkClientContext.addPathListener(ZK_BROKER_PATH, true, new BrokerPathChildrenCacheListener());
         // Topic Message节点监控
-        zkClientContext.addPathListener(ZK_BROKER_PATH, true, new TopicMessagePathChildrenCacheListener());
+        zkClientContext.addPathListener(ZK_TOPIC_PATH, true, new TopicMessagePathChildrenCacheListener());
 
         // 启动Server
         startClusterServer();
@@ -357,6 +358,9 @@ public class BrokerCluster implements Cluster {
         // Note:
         //  存在问题: 消费组消费位置不统一, 暂时消费组中消费最小位置[浪费网络资源]
         private void topicChangedAndRequest(ChildData childData) throws Exception {
+            if (childData == null) {
+                return;
+            }
             String data = new String(childData.getData());
             if (Strings.isNotEmpty(data)) {
                 BrokerMessageHandler.TopicNodeData topicNodeData = GsonUtils.fromJson(data, BrokerMessageHandler.TopicNodeData.class);
@@ -423,6 +427,9 @@ public class BrokerCluster implements Cluster {
             // Broker服务地址
             String brokerAddress = new String(childData.getData());
             InetSocketAddress socketAddress = Utils.stringCastSocketAddress(brokerAddress, ":");
+
+            LOGGER.info("Broker server node[{}] online .", brokerAddress);
+
             BrokerNode node = new BrokerNode(UUID, socketAddress);
             BrokerTransportPool pool = connectors.get(node);
             if (pool == null) {
@@ -448,6 +455,9 @@ public class BrokerCluster implements Cluster {
             String UUID = path.substring(ZK_BROKER_PATH.length() + 1);
             // Broker服务地址
             String brokerAddress = new String(childData.getData());
+
+            LOGGER.info("broker server node[{}] offline .", brokerAddress);
+
             InetSocketAddress socketAddress = Utils.stringCastSocketAddress(brokerAddress, ":");
             BrokerNode node = new BrokerNode(UUID, socketAddress);
             connectors.remove(node);

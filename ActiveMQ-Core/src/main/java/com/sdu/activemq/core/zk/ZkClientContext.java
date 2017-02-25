@@ -10,10 +10,12 @@ import org.apache.curator.framework.recipes.cache.PathChildrenCache;
 import org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent;
 import org.apache.curator.framework.recipes.cache.PathChildrenCacheListener;
 import org.apache.curator.retry.RetryNTimes;
+import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -100,9 +102,13 @@ public class ZkClientContext {
         return stat != null;
     }
 
-    public List<String> getChildNode(String parentPath) throws Exception {
+    public List<String> getChildNode(String parentPath) {
         valid();
-        return framework.getChildren().forPath(parentPath);
+        try {
+            return framework.getChildren().forPath(parentPath);
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
     }
 
     public String createNode(String path, byte []data) throws Exception {

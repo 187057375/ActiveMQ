@@ -53,9 +53,6 @@ public class BrokerTransport {
 
     private ChannelInboundHandler messageHandler = null;
 
-    //
-    private KryoSerializer serializer = new KryoSerializer();
-
     public BrokerTransport(String brokerAddress, MQConfig mqConfig, ChannelInboundHandler messageHandler) {
         this.brokerAddress = brokerAddress;
         this.mqConfig = mqConfig;
@@ -85,6 +82,7 @@ public class BrokerTransport {
             @Override
             protected void initChannel(SocketChannel ch) throws Exception {
                 // 心跳[1秒内若是无数据读取, 则发送心跳]
+                KryoSerializer serializer = new KryoSerializer(MQMessage.class);
                 ch.pipeline().addLast(new IdleStateHandler(1, 4, 0, TimeUnit.SECONDS));
                 ch.pipeline().addLast(new MessageObjectDecoder(serializer));
                 ch.pipeline().addLast(new MessageObjectEncoder(serializer));
@@ -118,7 +116,7 @@ public class BrokerTransport {
 
     private class HeartBeatHandler extends ChannelInboundHandlerAdapter {
 
-        MsgHeartBeat msg = new MsgHeartBeat(Utils.socketAddressCastString(nettyClient.getLocalSocketAddress()));
+        MsgHeartBeat msg = new MsgHeartBeat("heat bear message");
 
         @Override
         public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
