@@ -335,7 +335,7 @@ public class BrokerCluster implements Cluster {
 
                 // 更改消费组消费位置
                 AtomicLong position = consumeRecord.get(group);
-                long start = position.getAndAdd(response.getEnd());
+                long start = position.getAndSet(response.getEnd());
 
                 //
                 response.setStart(0);

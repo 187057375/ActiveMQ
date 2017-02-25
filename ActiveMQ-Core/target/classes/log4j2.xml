@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<Configuration status="WARN" monitorInterval="600">
+<Configuration status="INFO" monitorInterval="600">
     <Properties>
         <!-- 配置日志文件输出目录 -->
         <Property name="LOG_HOME">/Users/hanhan.zhang/logs</Property>
