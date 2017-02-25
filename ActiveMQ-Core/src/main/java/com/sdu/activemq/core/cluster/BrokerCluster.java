@@ -274,7 +274,11 @@ public class BrokerCluster implements Cluster {
      *
      *  2: 主题消息发生变化, 请求变更的主题消息并推送到'Consumer'消费端
      *
+     *  Note:
+     *
+     *    BrokerMsgHandler被过个BrokerTransport恭喜, 需添加@Sharable标签
      * */
+    @ChannelHandler.Sharable
     private class BrokerMsgHandler extends ChannelInboundHandlerAdapter {
 
         @Override

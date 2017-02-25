@@ -1,16 +1,14 @@
 package com.sdu.activemq.msg;
 
 import com.sdu.activemq.util.Utils;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 /**
  * @author hanhan.zhang
  * */
 @Setter
 @Getter
+@ToString
 @AllArgsConstructor
 @NoArgsConstructor
 public class MsgRequest implements Message {

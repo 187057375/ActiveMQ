@@ -85,6 +85,11 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
         }
     }
 
+    @Override
+    public boolean isSharable() {
+        return true;
+    }
+
     // MQ消息存储
     private void doMsgStore(ChannelHandlerContext ctx, MQMessage msg) {
         try {

@@ -1,10 +1,7 @@
 package com.sdu.activemq.msg;
 
 import com.sdu.activemq.util.Utils;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.util.List;
 
@@ -13,6 +10,7 @@ import java.util.List;
  * */
 @Setter
 @Getter
+@ToString
 @AllArgsConstructor
 @NoArgsConstructor
 public class MsgResponse implements Message {

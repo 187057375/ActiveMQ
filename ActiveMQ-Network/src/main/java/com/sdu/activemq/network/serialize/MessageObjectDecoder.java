@@ -54,4 +54,9 @@ public class MessageObjectDecoder extends ByteToMessageDecoder {
             }
         }
     }
+
+    @Override
+    public boolean isSharable() {
+        return false;
+    }
 }

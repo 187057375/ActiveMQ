@@ -21,4 +21,9 @@ public class MessageObjectEncoder extends MessageToByteEncoder<Object> {
     protected void encode(ChannelHandlerContext ctx, Object msg, ByteBuf out) throws Exception {
         serialize.encode(out, msg);
     }
+
+    @Override
+    public boolean isSharable() {
+        return false;
+    }
 }

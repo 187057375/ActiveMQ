@@ -67,15 +67,12 @@ public class BrokerServer implements Server {
 
     @Override
     public void start() throws Exception {
-        KryoSerializer kryoSerializer = new KryoSerializer(MQMessage.class);
-        MessageObjectDecoder decoder = new MessageObjectDecoder(kryoSerializer);
-        MessageObjectEncoder encoder = new MessageObjectEncoder(kryoSerializer);
-        doStartServer(decoder, encoder);
+        doStartServer();
         // JVM退出钩子
         Runtime.getRuntime().addShutdownHook(new ShutdownHook());
     }
 
-    private void doStartServer(MessageObjectDecoder decoder, MessageObjectEncoder encoder) throws Exception {
+    private void doStartServer() throws Exception {
         // 工作线程
         int poolSize = brokerConfig.getBrokerWorkerThreads();
         int queueSize = brokerConfig.getBrokerMQQueueSize();
@@ -118,8 +115,9 @@ public class BrokerServer implements Server {
             @Override
             protected void initChannel(SocketChannel ch) throws Exception {
                 // 设置Socket数据通信编码
-                ch.pipeline().addLast(decoder);
-                ch.pipeline().addLast(encoder);
+                KryoSerializer kryoSerializer = new KryoSerializer(MQMessage.class);
+                ch.pipeline().addLast(new MessageObjectDecoder(kryoSerializer));
+                ch.pipeline().addLast(new MessageObjectEncoder(kryoSerializer));
                 ch.pipeline().addLast(brokerMessageHandler);
             }
         });
