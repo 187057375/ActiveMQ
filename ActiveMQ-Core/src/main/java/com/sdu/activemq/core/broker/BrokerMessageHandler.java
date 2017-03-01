@@ -186,7 +186,7 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
                         InetSocketAddress socketAddress = brokerServer.getNettyServer().getSocketAddress();
                         TopicNodeData topicNodeData = new TopicNodeData(message.getTopic(), Utils.socketAddressCastString(socketAddress), brokerId, 0);
                         String data = GsonUtils.toJson(topicNodeData);
-                        String nodePath = brokerServer.getZkClientContext().createNode(path, data.getBytes());
+                        String nodePath = brokerServer.getZkClientContext().createNode(path, data);
                         if (!Strings.isNullOrEmpty(nodePath)) {
                             created.set(true);
                         }
