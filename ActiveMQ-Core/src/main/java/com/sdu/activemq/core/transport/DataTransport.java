@@ -1,4 +1,4 @@
-package com.sdu.activemq.core.broker.client;
+package com.sdu.activemq.core.transport;
 
 import com.google.common.collect.Maps;
 import com.sdu.activemq.core.MQConfig;
@@ -26,26 +26,28 @@ import static com.sdu.activemq.msg.MQMsgType.MQHeartBeat;
 
 
 /**
- * Broker Server服务客户端
+ * 网络数据传输
  *
  * @author hanhan.zhang
  * */
-public class BrokerTransport {
+public class DataTransport {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(BrokerTransport.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DataTransport.class);
 
-    // Broker Server客户端Socket IO线程数
-    private static final String BROKER_TRANSPORT_SOCKET_THREADS = "broker.transport.socket.threads";
+    // 客户端Socket IO线程数
+    private static final String TRANSPORT_SOCKET_THREADS = "transport.socket.threads";
 
-    // Broker Server客户端Socket发送缓冲区
-    private static final String BROKER_TRANSPORT_SOCKET_SND_BUF = "broker.transport.socket.snd.buf";
+    // 客户端Socket发送缓冲区
+    private static final String TRANSPORT_SOCKET_SND_BUF = "transport.socket.snd.buf";
 
-    // Broker Server客户端Socket接收缓冲区
-    private static final String BROKER_TRANSPORT_SOCKET_RCV_BUF = "broker.transport.socket.rcv.buf";
+    // 客户端Socket接收缓冲区
+    private static final String TRANSPORT_SOCKET_RCV_BUF = "transport.socket.rcv.buf";
+
+    private static final String TRANSPORT_EVENT_LOOP_TYPE = "transport.event.loop.type";
 
 
-    // MQ Broker服务地址
-    private String brokerAddress;
+    // 远端服务地址
+    private String remoteServerAddress;
 
     private NettyClient nettyClient;
 
@@ -53,27 +55,23 @@ public class BrokerTransport {
 
     private ChannelInboundHandler messageHandler = null;
 
-    public BrokerTransport(String brokerAddress, MQConfig mqConfig, ChannelInboundHandler messageHandler) {
-        this.brokerAddress = brokerAddress;
+    public DataTransport(String remoteServerAddress, MQConfig mqConfig, ChannelInboundHandler messageHandler) {
+        this.remoteServerAddress = remoteServerAddress;
         this.mqConfig = mqConfig;
         this.messageHandler = messageHandler;
         doStart();
     }
 
-    /**
-     * Broker Server创建客户端连接
-     * */
     private void doStart() {
         NettyClientConfig clientConfig = new NettyClientConfig();
-        clientConfig.setEPool(false);
-        clientConfig.setSocketThreads(mqConfig.getInt(BROKER_TRANSPORT_SOCKET_THREADS, 10));
+        clientConfig.setEPool(mqConfig.getBoolean(TRANSPORT_EVENT_LOOP_TYPE, false));
+        clientConfig.setSocketThreads(mqConfig.getInt(TRANSPORT_SOCKET_THREADS, 10));
         clientConfig.setClientThreadFactory(Utils.buildThreadFactory("message-sync-socket-thread-%d"));
-        clientConfig.setRemoteAddress(brokerAddress);
+        clientConfig.setRemoteAddress(remoteServerAddress);
 
-        // Channel
         Map<ChannelOption, Object> options = Maps.newHashMap();
-        options.put(ChannelOption.SO_SNDBUF, mqConfig.getInt(BROKER_TRANSPORT_SOCKET_SND_BUF, 1024));
-        options.put(ChannelOption.SO_RCVBUF, mqConfig.getInt(BROKER_TRANSPORT_SOCKET_RCV_BUF, 1024));
+        options.put(ChannelOption.SO_SNDBUF, mqConfig.getInt(TRANSPORT_SOCKET_SND_BUF, 1024));
+        options.put(ChannelOption.SO_RCVBUF, mqConfig.getInt(TRANSPORT_SOCKET_RCV_BUF, 1024));
         options.put(ChannelOption.TCP_NODELAY, true);
         options.put(ChannelOption.SO_KEEPALIVE, false);
         clientConfig.setOptions(options);
@@ -81,8 +79,8 @@ public class BrokerTransport {
         clientConfig.setChannelHandler(new ChannelInitializer<SocketChannel>() {
             @Override
             protected void initChannel(SocketChannel ch) throws Exception {
-                // 心跳[1秒内若是无数据读取, 则发送心跳]
                 KryoSerializer serializer = new KryoSerializer(MQMessage.class);
+                // 心跳[1秒内若是无数据读取, 则发送心跳]
                 ch.pipeline().addLast(new IdleStateHandler(1, 4, 0, TimeUnit.MINUTES));
                 ch.pipeline().addLast(new MessageObjectDecoder(serializer));
                 ch.pipeline().addLast(new MessageObjectEncoder(serializer));
@@ -91,12 +89,11 @@ public class BrokerTransport {
             }
         });
 
-        // 创建Broker Server's Client并启动
         nettyClient = new NettyClient(clientConfig);
         nettyClient.start();
 
         if (nettyClient.isStarted()) {
-            LOGGER.info("transport connect broker server[{}] success .", brokerAddress);
+            LOGGER.info("transport connect remote server[{}] success .", remoteServerAddress);
         }
     }
 

@@ -1,4 +1,4 @@
-package com.sdu.activemq.core.broker.client;
+package com.sdu.activemq.core.transport;
 
 import com.sdu.activemq.core.MQConfig;
 import io.netty.channel.ChannelInboundHandler;
@@ -8,7 +8,7 @@ import org.apache.commons.pool.PoolableObjectFactory;
  *
  * @author hanhan.zhang
  * */
-public class TransportPoolFactory implements PoolableObjectFactory<BrokerTransport> {
+public class TransportPoolFactory implements PoolableObjectFactory<DataTransport> {
 
     // MQ Broker服务地址
     private String brokerAddress;
@@ -24,28 +24,28 @@ public class TransportPoolFactory implements PoolableObjectFactory<BrokerTranspo
     }
 
     @Override
-    public BrokerTransport makeObject() throws Exception {
-        BrokerTransport connector = new BrokerTransport(brokerAddress, mqConfig, channelHandler);
+    public DataTransport makeObject() throws Exception {
+        DataTransport connector = new DataTransport(brokerAddress, mqConfig, channelHandler);
         return connector;
     }
 
     @Override
-    public void destroyObject(BrokerTransport connector) throws Exception {
+    public void destroyObject(DataTransport connector) throws Exception {
         connector.stop();
     }
 
     @Override
-    public boolean validateObject(BrokerTransport connector) {
+    public boolean validateObject(DataTransport connector) {
         return true;
     }
 
     @Override
-    public void activateObject(BrokerTransport connector) throws Exception {
+    public void activateObject(DataTransport connector) throws Exception {
 
     }
 
     @Override
-    public void passivateObject(BrokerTransport connector) throws Exception {
+    public void passivateObject(DataTransport connector) throws Exception {
 
     }
 }

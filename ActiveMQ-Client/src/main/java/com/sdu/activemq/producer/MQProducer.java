@@ -85,7 +85,7 @@ public class MQProducer {
                 MsgContent msgContent = new MsgContent("MQTest", address, content.getBytes(), System.currentTimeMillis());
                 MQMessage msg = new MQMessage(MQMsgStore, ActiveMQProducer, msgContent);
                 ctx.writeAndFlush(msg);
-            }, 2, 2, TimeUnit.SECONDS);
+            }, 10, 10, TimeUnit.MILLISECONDS);
         }
 
         @Override

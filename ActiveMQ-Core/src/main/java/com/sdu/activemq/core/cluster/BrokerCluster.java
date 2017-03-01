@@ -4,8 +4,8 @@ import com.google.common.collect.Maps;
 import com.sdu.activemq.core.MQConfig;
 import com.sdu.activemq.core.broker.BrokerMessageHandler;
 import com.sdu.activemq.core.broker.BrokerServer;
-import com.sdu.activemq.core.broker.client.BrokerTransport;
-import com.sdu.activemq.core.broker.client.BrokerTransportPool;
+import com.sdu.activemq.core.transport.DataTransport;
+import com.sdu.activemq.core.transport.BrokerTransportPool;
 import com.sdu.activemq.core.zk.ZkClientContext;
 import com.sdu.activemq.core.zk.ZkConfig;
 import com.sdu.activemq.msg.*;
@@ -266,7 +266,7 @@ public class BrokerCluster implements Cluster {
 
             // 转存主题消息
             BrokerTransportPool pool = connectors.get(brokerNode);
-            BrokerTransport transport = pool.borrowObject();
+            DataTransport transport = pool.borrowObject();
             transport.writeAndFlush(mqMessage);
             pool.returnObject(transport);
         }
@@ -390,7 +390,7 @@ public class BrokerCluster implements Cluster {
                 InetSocketAddress socketAddress = Utils.stringCastSocketAddress(topicNodeData.getBrokerServer(), ":");
                 BrokerNode brokerNode = new BrokerNode(topicNodeData.getBrokerId(), socketAddress);
                 BrokerTransportPool pool = connectors.get(brokerNode);
-                BrokerTransport transport = pool.borrowObject();
+                DataTransport transport = pool.borrowObject();
 
                 //
                 long startSequence = getTopicConsumeMinSequence(topicNodeData.getTopic(), topicConsumeRecord);

@@ -1,4 +1,4 @@
-package com.sdu.activemq.core.broker.client;
+package com.sdu.activemq.core.transport;
 
 import com.sdu.activemq.core.MQConfig;
 import io.netty.channel.ChannelInboundHandler;
@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author hanhan.zhang
  * */
-public class BrokerTransportPool extends GenericObjectPool<BrokerTransport> {
+public class BrokerTransportPool extends GenericObjectPool<DataTransport> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BrokerTransportPool.class);
 
