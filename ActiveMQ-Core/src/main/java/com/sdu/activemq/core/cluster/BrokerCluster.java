@@ -87,16 +87,21 @@ public class BrokerCluster {
 
     private NettyServer nettyServer;
 
+    private MQConfig mqConfig;
+
     private ClusterConfig clusterConfig;
 
-    private BrokerCluster(MQConfig mqConfig) throws Exception {
+    public BrokerCluster(MQConfig mqConfig) {
+        this.mqConfig = mqConfig;
         this.clusterConfig = new ClusterConfig(mqConfig);
         this.endPoints = Sets.newConcurrentHashSet();
         this.topicSubscribe = Maps.newConcurrentMap();
         this.topicStore = Maps.newConcurrentMap();
+    }
+
+    public void start() throws Exception {
         connectZk(mqConfig);
         startClusterServer();
-
         // JVM关闭钩子
         Runtime.getRuntime().addShutdownHook(new ShutdownHook());
     }
@@ -111,13 +116,16 @@ public class BrokerCluster {
     }
 
     private EndPoint getBrokerNode(String topic) throws Exception {
-        String data = new String(zkClientContext.getNodeData(ZkUtils.zkTopicMetaNode(topic)));
-        if (Strings.isNotEmpty(data)) {
-            ZkMsgTopicNode storeNode = GsonUtils.fromJson(data, ZkMsgTopicNode.class);
-            if (storeNode != null) {
-                EndPoint endPoint = new EndPoint(storeNode.getBrokerId(), storeNode.getBrokerAddress());
-                updateTopicStore(topic, endPoint);
-                return endPoint;
+        byte []dataByte = zkClientContext.getNodeData(ZkUtils.zkTopicMetaNode(topic));
+        if (dataByte != null) {
+            String data = new String(dataByte);
+            if (Strings.isNotEmpty(data)) {
+                ZkMsgTopicNode storeNode = GsonUtils.fromJson(data, ZkMsgTopicNode.class);
+                if (storeNode != null) {
+                    EndPoint endPoint = new EndPoint(storeNode.getBrokerId(), storeNode.getBrokerAddress());
+                    updateTopicStore(topic, endPoint);
+                    return endPoint;
+                }
             }
         }
 

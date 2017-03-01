@@ -97,6 +97,11 @@ public class DataTransport {
 
         nettyClient = new NettyClient(clientConfig);
         nettyClient.start();
+        try {
+            nettyClient.blockUntilStarted(2);
+        } catch (Exception e) {
+            // ignore
+        }
 
         if (nettyClient.isStarted()) {
             LOGGER.info("transport connect remote server[{}] success .", remoteServerAddress);

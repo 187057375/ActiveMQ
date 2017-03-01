@@ -32,7 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static com.sdu.activemq.msg.MQMsgSource.ActiveMQConsumer;
+import static com.sdu.activemq.msg.MQMsgSource.MQConsumer;
 import static com.sdu.activemq.msg.MQMsgSource.MQCluster;
 import static com.sdu.activemq.msg.MQMsgType.*;
 import static org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent.Type.CHILD_UPDATED;
@@ -119,7 +119,7 @@ public class MQConsumer {
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
             TopicStoreRequest request = new TopicStoreRequest(topic, 0);
-            MQMessage mqMessage = new MQMessage(MQTopicStoreRequest, ActiveMQConsumer, request);
+            MQMessage mqMessage = new MQMessage(MQTopicStoreRequest, MQConsumer, request);
             ctx.writeAndFlush(mqMessage);
         }
 

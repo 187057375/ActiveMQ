@@ -1,5 +1,6 @@
 package com.sdu.activemq.core.producer;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.lmax.disruptor.dsl.ProducerType;
 import com.sdu.activemq.core.MQConfig;
@@ -20,11 +21,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-import static com.sdu.activemq.msg.MQMsgSource.ActiveMQProducer;
+import static com.sdu.activemq.msg.MQMsgSource.MQProducer;
 import static com.sdu.activemq.msg.MQMsgType.MQBrokerAllocateRequest;
 import static com.sdu.activemq.msg.MQMsgType.MQMsgStore;
 import static com.sdu.activemq.msg.MQMsgType.MQMsgStoreAck;
@@ -36,8 +39,10 @@ public class MQProducer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MQProducer.class);
 
+    // 集群服务地址
     private String clusterAddress;
 
+    // 生产消息的主题
     private String topic;
 
     private MQConfig mqConfig;
@@ -47,21 +52,27 @@ public class MQProducer {
 
     private NettyClient nettyClient;
 
+    // Broker连接池[key = broker地址, value = 连接池]
     private Map<String, TransportPool> brokerConnectPool;
 
     // 任务线程
     private ExecutorService executorService;
 
-    public MQProducer(String topic, String clusterAddress, MQConfig mqConfig) {
+    private MessageSenderHandler senderHandler;
+
+    private AtomicBoolean started = new AtomicBoolean(false);
+
+    public MQProducer(String topic, MQConfig mqConfig) {
         this.topic = topic;
-        this.clusterAddress = clusterAddress;
+        this.clusterAddress = mqConfig.getString("cluster.address", "127.0.0.1:6712");
         this.mqConfig = mqConfig;
-        this.queue = new DisruptorQueue(ProducerType.SINGLE, new MessageSenderHandler(), mqConfig);
+        this.senderHandler = new MessageSenderHandler();
+        this.queue = new DisruptorQueue(ProducerType.SINGLE, this.senderHandler, mqConfig);
         this.brokerConnectPool = Maps.newConcurrentMap();
         this.executorService = Executors.newSingleThreadExecutor();
     }
 
-    private void start() {
+    public void start() throws Exception {
         NettyClientConfig clientConfig = new NettyClientConfig();
         clientConfig.setEPool(false);
         clientConfig.setSocketThreads(10);
@@ -90,13 +101,21 @@ public class MQProducer {
         nettyClient = new NettyClient(clientConfig);
         nettyClient.start();
 
+        nettyClient.blockUntilStarted(2);
+
         if (nettyClient.isStarted()) {
             LOGGER.info("transport connect cluster[{}] success .", clusterAddress);
+            started.set(true);
         }
+
+        Runtime.getRuntime().addShutdownHook(new ShutdownHook());
     }
 
 
-    public void sendMsg(MQMessage mqMessage) {
+    public void sendMsg(MQMessage mqMessage, boolean rightNow) throws Exception {
+        if (!started.get()) {
+            throw new IllegalStateException("Producer is not started");
+        }
         if (mqMessage.getMsgType() != MQMsgStore) {
             throw new IllegalArgumentException("message type must be MQMsgStore");
         }
@@ -104,13 +123,30 @@ public class MQProducer {
         if (content.getTopic() == null || !content.getTopic().equals(this.topic)) {
             throw new IllegalArgumentException("message topic must be " + topic);
         }
-        queue.publish(mqMessage);
+
+        if (rightNow) {
+            senderHandler.handle(mqMessage);
+        } else {
+            queue.publish(mqMessage);
+        }
     }
 
-    public void close() throws Exception {
+    private void close() throws Exception {
+        started.set(false);
         if (nettyClient != null && nettyClient.isStarted()) {
             nettyClient.stop(10, TimeUnit.SECONDS);
         }
+
+        if (executorService != null) {
+            executorService.shutdown();
+        }
+
+        if (brokerConnectPool != null && brokerConnectPool.size() > 0) {
+            for (Map.Entry<String, TransportPool> entry : brokerConnectPool.entrySet()) {
+                entry.getValue().destroy();
+            }
+        }
+
     }
 
     private class MessageSenderHandler implements MessageHandler {
@@ -123,7 +159,9 @@ public class MQProducer {
             MQMessage mqMessage = (MQMessage) msg;
             MsgContent content = (MsgContent) mqMessage.getMsg();
 
-            TransportPool pool = brokerConnectPool.get(content.getTopic());
+            // 负责均衡[未做]
+            TransportPool pool = Lists.newArrayList(brokerConnectPool.values()).get(0);
+
             if (pool == null) {
                 throw new IllegalStateException("can't find topic " + content.getTopic() + " store broker");
             }
@@ -139,7 +177,7 @@ public class MQProducer {
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
             BrokerAllocateRequest request = new BrokerAllocateRequest(topic, 0);
-            MQMessage mqMessage = new MQMessage(MQBrokerAllocateRequest, ActiveMQProducer, request);
+            MQMessage mqMessage = new MQMessage(MQBrokerAllocateRequest, MQProducer, request);
             ctx.writeAndFlush(mqMessage);
         }
 
@@ -152,10 +190,11 @@ public class MQProducer {
             MQMessage mqMessage = (MQMessage) msg;
             final BrokerAllocateResponse response = (BrokerAllocateResponse) mqMessage.getMsg();
 
-            executorService.submit(() -> {
-                TransportPool pool = new TransportPool(response.getBrokerAddress(), mqConfig, new MessageStoreHandler());
-                brokerConnectPool.put(topic, pool);
-            });
+            TransportPool pool = new TransportPool(response.getBrokerAddress(), mqConfig, new MessageStoreHandler());
+            brokerConnectPool.put(response.getBrokerAddress(), pool);
+//            executorService.submit(() -> {
+//
+//            });
         }
     }
 
@@ -177,5 +216,30 @@ public class MQProducer {
                         msgAck.getTopic(), msgAck.getMsgId(), msgAck.getBrokerMsgSequence(), msgAck.getAckStatus());
             }
         }
+    }
+
+    private class ShutdownHook extends Thread {
+        @Override
+        public void run() {
+            try {
+                MQProducer.this.close();
+            } catch (Exception e) {
+                LOGGER.error("Producer close occur exception", e);
+            }
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+
+        MQProducer producer = new MQProducer("mq.test", new MQConfig("producer.cfg"));
+        producer.start();
+
+        while (true) {
+            String msg = UUID.randomUUID().toString();
+            MsgContent msgContent = new MsgContent("mq.test", "", msg.getBytes(), System.currentTimeMillis());
+            MQMessage mqMessage = new MQMessage(MQMsgStore, MQProducer, msgContent);
+            producer.sendMsg(mqMessage, true);
+        }
+
     }
 }

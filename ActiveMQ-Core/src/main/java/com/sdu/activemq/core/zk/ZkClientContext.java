@@ -9,6 +9,7 @@ import org.apache.curator.framework.recipes.cache.*;
 import org.apache.curator.framework.recipes.locks.InterProcessMutex;
 import org.apache.curator.retry.RetryNTimes;
 import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -122,10 +123,14 @@ public class ZkClientContext {
 
     }
 
-    public byte[] getNodeData(String path) throws Exception {
-        valid();
-        Stat stat = new Stat();
-        return framework.getData().storingStatIn(stat).forPath(path);
+    public byte[] getNodeData(String path) {
+        try {
+            valid();
+            Stat stat = new Stat();
+            return framework.getData().storingStatIn(stat).forPath(path);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public boolean isNodeExist(String path) throws Exception {

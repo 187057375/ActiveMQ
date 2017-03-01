@@ -52,6 +52,13 @@ public class NettyClient {
         });
     }
 
+    public void blockUntilStarted(long seconds) throws InterruptedException {
+        synchronized (this) {
+            long maxWaitTimeMs = TimeUnit.MILLISECONDS.convert(seconds, TimeUnit.SECONDS);
+            wait(maxWaitTimeMs);
+        }
+    }
+
     public ChannelFuture writeAndFlush(Object object) {
         if (!isStarted()) {
             throw new IllegalStateException("client not started !");

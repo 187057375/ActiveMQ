@@ -1,10 +1,7 @@
 package com.sdu.activemq.msg;
 
 import com.sdu.activemq.util.Utils;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 /**
  * @author hanhan.zhang
@@ -13,6 +10,7 @@ import lombok.Setter;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
+@ToString
 public class MsgContent implements Message {
 
     // 消息主题
