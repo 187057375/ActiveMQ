@@ -1,14 +1,15 @@
 package com.sdu.activemq.core.cluster;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.sdu.activemq.core.MQConfig;
-import com.sdu.activemq.core.cluster.broker.BrokerMessageHandler;
-import com.sdu.activemq.core.transport.DataTransport;
-import com.sdu.activemq.core.transport.TransportPool;
 import com.sdu.activemq.core.zk.ZkClientContext;
 import com.sdu.activemq.core.zk.ZkConfig;
 import com.sdu.activemq.core.zk.node.ZkBrokerNode;
+import com.sdu.activemq.core.zk.node.ZkConsumeMetaNode;
 import com.sdu.activemq.core.zk.node.ZkMsgDataNode;
+import com.sdu.activemq.core.zk.node.ZkMsgTopicNode;
 import com.sdu.activemq.msg.*;
 import com.sdu.activemq.network.serialize.MessageObjectDecoder;
 import com.sdu.activemq.network.serialize.MessageObjectEncoder;
@@ -19,86 +20,121 @@ import com.sdu.activemq.utils.GsonUtils;
 import com.sdu.activemq.utils.Utils;
 import com.sdu.activemq.utils.ZkUtils;
 import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.channel.*;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
 import io.netty.channel.socket.SocketChannel;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.cache.*;
 import org.apache.logging.log4j.util.Strings;
+import org.apache.zookeeper.CreateMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.InetSocketAddress;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.sdu.activemq.msg.MQMsgSource.MQCluster;
-import static com.sdu.activemq.msg.MQMsgType.MQMsgRequest;
-import static com.sdu.activemq.msg.MQMsgType.MQSubscribeAck;
-import static com.sdu.activemq.utils.Const.ZK_BROKER_PATH;
-import static com.sdu.activemq.utils.Const.ZK_MSG_DATA_PATH;
+import static com.sdu.activemq.msg.MQMsgType.MQBrokerAllocateResponse;
+import static com.sdu.activemq.msg.MQMsgType.MQTopicStoreResponse;
+import static com.sdu.activemq.utils.Const.*;
 import static org.apache.curator.framework.recipes.cache.TreeCacheEvent.Type.NODE_UPDATED;
 
 /**
- * BrokerCluster职责:
+ * Broker Cluster职责:
  *
- *  1: 路由MQ消息
+ *  1: 监控Broker Server上线/下线
  *
- *  2: 探测Broker存活
+ *  2: 消息存储负载均衡
  *
+ *  3: 监听消息存储节点
  *
  * @author hanhan.zhang
  * */
-public class BrokerCluster implements Cluster {
+public class BrokerCluster {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BrokerCluster.class);
 
-    // Broker链接表[每个Broker拥有一个客户端连接池]
-    private ConcurrentHashMap<BrokerNode, TransportPool> connectors;
+    // Broker节点
+    private Set<EndPoint> endPoints;
 
-    // 记录Topic消费序号[key = 消息主题, value = [key = 消费组名, value = 消费位置]]
-    private ConcurrentHashMap<String, Map<String, AtomicLong>> topicConsumeRecord;
+    // 主题订阅[key = 主题, value = [key = 消费组, value = 消费者节点信息]]
+    private Map<String, Map<String, Set<EndPoint>>> topicSubscribe;
 
-    // 消息消费推送路由表[key = 消息主题, value = [key = 消费组, value = 客户端连接集合]]
-    private ConcurrentHashMap<String, Map<String, List<Channel>>> topicConsumeClientRecord;
+    // 主题存储[key = 主题, value = broker存储节点]
+    private Map<String, Set<EndPoint>> topicStore;
 
-    // 记录'Producer'路由表[key = Producer服务地址, value = Netty Channel]
-    private ConcurrentHashMap<String, Channel> producerRoute;
-
-    // Zk
     private ZkClientContext zkClientContext;
-
-    private ZkConfig zkConfig;
-
-    private ClusterConfig clusterConfig;
-
-    private Random loadRandom;
 
     private NettyServer nettyServer;
 
-    public BrokerCluster(MQConfig mqConfig) {
-        zkConfig = new ZkConfig(mqConfig);
-        clusterConfig = new ClusterConfig(mqConfig);
-        connectors = new ConcurrentHashMap<>();
-        topicConsumeRecord = new ConcurrentHashMap<>();
-        topicConsumeClientRecord = new ConcurrentHashMap<>();
-        producerRoute = new ConcurrentHashMap<>();
-        loadRandom = new Random();
+    private ClusterConfig clusterConfig;
+
+    private BrokerCluster(MQConfig mqConfig) throws Exception {
+        this.clusterConfig = new ClusterConfig(mqConfig);
+        this.endPoints = Sets.newConcurrentHashSet();
+        this.topicSubscribe = Maps.newConcurrentMap();
+        this.topicStore = Maps.newConcurrentMap();
+        connectZk(mqConfig);
+        startClusterServer();
+
+        // JVM关闭钩子
+        Runtime.getRuntime().addShutdownHook(new ShutdownHook());
     }
 
-    @Override
-    public void start() throws Exception {
-        zkClientContext = new ZkClientContext(zkConfig);
-        zkClientContext.start();
+    private void updateTopicStore(String topic, EndPoint point) {
+        Set<EndPoint> endPoints = topicStore.get(topic);
+        if (endPoints == null) {
+            endPoints = Sets.newConcurrentHashSet();
+            topicStore.put(topic, endPoints);
+        }
+        endPoints.add(point);
+    }
 
-        // Broker Server上线/下线监控
-        zkClientContext.addPathListener(ZK_BROKER_PATH, true, new BrokerPathChildrenCacheListener());
-        // Topic Message节点监控
-        zkClientContext.addSubAllPathListener(ZK_MSG_DATA_PATH, new TopicMessagePathChildrenCacheListener());
+    private EndPoint getBrokerNode(String topic) throws Exception {
+        String data = new String(zkClientContext.getNodeData(ZkUtils.zkTopicMetaNode(topic)));
+        if (Strings.isNotEmpty(data)) {
+            ZkMsgTopicNode storeNode = GsonUtils.fromJson(data, ZkMsgTopicNode.class);
+            if (storeNode != null) {
+                EndPoint endPoint = new EndPoint(storeNode.getBrokerId(), storeNode.getBrokerAddress());
+                updateTopicStore(topic, endPoint);
+                return endPoint;
+            }
+        }
 
-        // 启动Server
-        startClusterServer();
+        // 随机选择一个节点
+        List<EndPoint> shuffleEndPoints = Lists.newLinkedList(this.endPoints);
+        Collections.shuffle(shuffleEndPoints);
+        EndPoint endPoint = shuffleEndPoints.get(0);
+        updateTopicStore(topic, endPoint);
+
+        // 创建ZK Store节点
+        ZkMsgTopicNode storeNode = new ZkMsgTopicNode(endPoint.getNodeAddress(), endPoint.getPointID(), topic);
+        zkClientContext.createNode(ZkUtils.zkTopicMetaNode(topic), GsonUtils.toJson(storeNode), CreateMode.PERSISTENT);
+
+        return endPoint;
+    }
+
+    private Set<String > getTopicStoreNode(String topic) {
+        Set<EndPoint> endPoints = topicStore.get(topic);
+        if (endPoints == null) {
+            return Collections.emptySet();
+        }
+        return endPoints.stream().map(EndPoint::getNodeAddress).collect(Collectors.toSet());
+    }
+
+    public void destroy() throws Exception {
+        if (zkClientContext != null && zkClientContext.isServing()) {
+            zkClientContext.destroy();
+        }
+        if (nettyServer != null && nettyServer.isServing()) {
+            nettyServer.stop(10, TimeUnit.SECONDS);
+        }
     }
 
     private void startClusterServer() throws Exception {
@@ -132,7 +168,7 @@ public class BrokerCluster implements Cluster {
                 // 设置Socket数据通信编码
                 ch.pipeline().addLast(new MessageObjectDecoder(serializer));
                 ch.pipeline().addLast(new MessageObjectEncoder(serializer));
-                ch.pipeline().addLast(new ClusterMsgHandler());
+                ch.pipeline().addLast(new ClusterMessageHandler());
             }
         });
 
@@ -146,215 +182,138 @@ public class BrokerCluster implements Cluster {
         }
 
         LOGGER.info("broker cluster start success, bind address : {}", Utils.socketAddressCastString(nettyServer.getSocketAddress()));
-
-        // JVM关闭钩子
-        Runtime.getRuntime().addShutdownHook(new ShutdownHook());
-    }
-
-
-    @Override
-    public void destroy() throws Exception {
-        zkClientContext.destroy();
-    }
-
-    // 消息存储负载均衡
-    private BrokerNode loadBalance() {
-        ArrayList<BrokerNode> brokerNodes = new ArrayList<>();
-        Enumeration<BrokerNode> it = connectors.keys();
-        while (it.hasMoreElements()) {
-            brokerNodes.add(it.nextElement());
-        }
-
-        return brokerNodes.get(loadRandom.nextInt(brokerNodes.size()));
     }
 
     /**
-     * Cluster职责:
-     *
-     *  1: 监听'Consumer'主题消息订阅
-     *
-     *  2: 监听'Producer'主题消息存储
-     *
+     * 连接ZK并监听节点[/activeMQ/broker/brokerId]变化
      * */
-    private class ClusterMsgHandler extends ChannelInboundHandlerAdapter {
-        @Override
-        public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-            if (msg.getClass() == MQMessage.class) {
-                MQMessage mqMessage = (MQMessage) msg;
-                MQMsgType type = mqMessage.getMsgType();
-                switch (type) {
-                    case MQSubscribe:
-                        doMsgSubscribe(ctx, mqMessage);
-                        break;
-                    case MQMsgStore:
-                        doMsgStore(ctx, mqMessage);
-                        break;
-                }
-            }
-        }
+    private void connectZk(MQConfig mqConfig) throws Exception {
+        zkClientContext = new ZkClientContext(new ZkConfig(mqConfig));
+        zkClientContext.start();
 
-        /**
-         * 'Consumer'订阅主题消息
-         * */
-        private void doMsgSubscribe(ChannelHandlerContext ctx, MQMessage mqMessage) {
-            MsgSubscribe subscribe = (MsgSubscribe) mqMessage.getMsg();
-            Channel channel = ctx.channel();
+        // Broker上线/下线监控
+        zkClientContext.addPathListener(ZK_BROKER_PATH, true, new BrokerPathChildrenCacheListener());
+        // 监控消息节点变化
+        zkClientContext.addSubAllPathListener(ZK_MSG_DATA_PATH, new TopicMessagePathChildrenCacheListener());
+        // 监控消息订阅节点变化
+        zkClientContext.addSubAllPathListener(ZK_MSG_CONSMUE_PATH, new ConsumeMetaPathChildrenCacheListener());
 
-            String clientAddress = Utils.socketAddressCastString((InetSocketAddress) channel.remoteAddress());
-
-            LOGGER.info("Consumer client : {}, consume msg group : {}, consume topic : {}", clientAddress, subscribe.getConsumerGroup(), subscribe.getTopic());
-
-            Map<String, List<Channel>> consumeClientRecord = topicConsumeClientRecord.get(subscribe.getTopic());
-            if (consumeClientRecord == null) {
-                consumeClientRecord = new ConcurrentHashMap<>();
-            }
-            List<Channel> clients = consumeClientRecord.get(subscribe.getConsumerGroup());
-            if (clients == null) {
-                clients = new CopyOnWriteArrayList<>();
-            }
-            clients.add(channel);
-            consumeClientRecord.put(subscribe.getConsumerGroup(), clients);
-            topicConsumeClientRecord.put(subscribe.getTopic(), consumeClientRecord);
-
-            // 初始化消费位置记录
-            ConcurrentHashMap<String, AtomicLong> consumeRecord = new ConcurrentHashMap<>();
-            consumeRecord.put(subscribe.getConsumerGroup(), new AtomicLong(0L));
-            topicConsumeRecord.put(subscribe.getTopic(), consumeRecord);
-
-            // 响应消费
-            MsgSubscribeAck subscribeAck = new MsgSubscribeAck(subscribe.getTopic(), MsgAckStatus.SUCCESS);
-            MQMessage msg = new MQMessage(MQSubscribeAck, MQCluster, subscribeAck);
-            ctx.writeAndFlush(msg);
-        }
-
-        /**
-         * 主题消息存储:
-         *
-         *  1: 保存'Producer'路由表[尚未做删除]
-         *
-         *  2: 'Broker'路由选择并转存主题消息
-         *
-         * */
-        private void doMsgStore(ChannelHandlerContext ctx, MQMessage mqMessage) throws Exception {
-            Channel channel = ctx.channel();
-
-            // 保存路由表消息
-            String producerAddress = Utils.socketAddressCastString((InetSocketAddress) channel.remoteAddress());
-            producerRoute.put(producerAddress, channel);
-
-            MsgContent msgContent = (MsgContent) mqMessage.getMsg();
-            msgContent.setProducerAddress(producerAddress);
-
-            // 路由'Broker'并转存主题消息
-            String topicPath = ZkUtils.brokerTopicNode(msgContent.getTopic());
-            List<String> brokerServerList = zkClientContext.getChildNode(topicPath);
-            BrokerNode brokerNode;
-            if (brokerServerList == null || brokerServerList.isEmpty()) {
-                brokerNode = loadBalance();
-            } else {
-                // 暂且只存储在一个Broker服务
-                String brokerAddress = brokerServerList.get(0);
-                String brokerZkPath = ZkUtils.brokerTopicNode(msgContent.getTopic(), brokerAddress);
-                byte []dataByte = zkClientContext.getNodeData(brokerZkPath);
-                String data = new String(dataByte);
-                if (Strings.isNotEmpty(data)) {
-                    ZkMsgDataNode topicNodeData = GsonUtils.fromJson(data, ZkMsgDataNode.class);
-                    brokerNode = new BrokerNode(topicNodeData.getBrokerId(), Utils.stringCastSocketAddress(topicNodeData.getBrokerServer(), ":"));
-                } else {
-                    brokerNode = loadBalance();
-                }
-            }
-
-            // 转存主题消息
-            TransportPool pool = connectors.get(brokerNode);
-            DataTransport transport = pool.borrowObject();
-            transport.writeAndFlush(mqMessage);
-            pool.returnObject(transport);
-        }
     }
 
-    /**
-     * Broker MQ消息处理[目前单节点, 存在问题: 处理各种网络连接/高可用]:
-     *
-     *  1: 对'Producer'的主题消息存储确认
-     *
-     *  2: 主题消息发生变化, 请求变更的主题消息并推送到'Consumer'消费端
-     *
-     *  Note:
-     *
-     *    BrokerMsgHandler被过个BrokerTransport共享, 需添加@Sharable标签
-     * */
-    @ChannelHandler.Sharable
-    private class BrokerMsgHandler extends ChannelInboundHandlerAdapter {
+
+    private class BrokerPathChildrenCacheListener implements PathChildrenCacheListener {
 
         @Override
-        public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-            if (msg.getClass() == MQMessage.class) {
-                MQMessage mqMessage = (MQMessage) msg;
-                MQMsgType type = mqMessage.getMsgType();
-                switch (type) {
-                    case MQMsgStoreAck:
-                        doMsgStoreAck(mqMessage);
-                        break;
-                    case MQMsgResponse:
-                        doMsgResponse(mqMessage);
-                        break;
-                }
+        public void childEvent(CuratorFramework client, PathChildrenCacheEvent event) throws Exception {
+            PathChildrenCacheEvent.Type type = event.getType();
+            ChildData childData = event.getData();
+            if (childData == null) {
+                return;
+            }
+            // 处理节点变化
+            switch (type) {
+                case CHILD_UPDATED:
+                    updateBroker(childData);
+                    break;
+                case CHILD_ADDED:
+                    updateBroker(childData);
+                    break;
+                case CHILD_REMOVED:
+                    deleteBroker(childData);
+                    break;
             }
         }
 
-        /**
-         * 主题消息存储确认
-         * */
-        private void doMsgStoreAck(MQMessage mqMessage) {
-            MsgAckImpl ackMessage = (MsgAckImpl) mqMessage.getMsg();
-            if (ackMessage.getAckStatus() == MsgAckStatus.SUCCESS) {
-                LOGGER.info("cluster store msg ack, topic : {}, brokerMsgSequence : {}", ackMessage.getTopic(), ackMessage.getBrokerMsgSequence());
-            }
-            String address = ackMessage.getProducerAddress();
-            Channel channel = producerRoute.get(address);
-            channel.writeAndFlush(mqMessage);
-        }
-
-        private void doMsgResponse(MQMessage msg) throws Exception {
-            MsgResponse response = (MsgResponse) msg.getMsg();
-            String topic = response.getTopic();
-
-            // 消费位置[key = 消费组名, value = 消费位置]
-            Map<String, AtomicLong> consumeRecord = topicConsumeRecord.get(topic);
-
-            // 推送'Consumer'消费端
-            Map<String, List<Channel>> consumeClient = topicConsumeClientRecord.get(topic);
-            if (consumeClient == null) {
-                LOGGER.info("No consumer, topic : {}", topic);
+        // Broker服务节点更新
+        private void updateBroker(ChildData childData) throws Exception {
+            if (childData == null || childData.getData() == null || childData.getData().length == 0) {
                 return;
             }
 
-            consumeClient.forEach((group, channels) -> {
-                Collections.shuffle(channels);
-                Channel channel = channels.get(0);
+            ZkBrokerNode zkNodeData = GsonUtils.fromJson(new String(childData.getData()), ZkBrokerNode.class);
 
-                // 更改消费组消费位置
-                AtomicLong position = consumeRecord.get(group);
-                long start = position.getAndSet(response.getEnd());
+            LOGGER.info("broker server[{}] online and update broker cluster .", zkNodeData.getBrokerAddress());
 
-                //
-                response.setStart(0);
-                response.setEnd(response.getEnd() - start);
+            EndPoint node = new EndPoint(zkNodeData.getBrokerId(), zkNodeData.getBrokerAddress());
 
-                channel.writeAndFlush(msg);
-            });
+            endPoints.add(node);
+        }
+
+        // Broker服务节点下线
+        private void deleteBroker(ChildData childData) {
+            if (childData == null || childData.getData() == null || childData.getData().length == 0) {
+                return;
+            }
+
+            ZkBrokerNode zkNodeData = GsonUtils.fromJson(new String(childData.getData()), ZkBrokerNode.class);
+
+            String brokerAddress = zkNodeData.getBrokerAddress();
+
+            LOGGER.info("broker server node[{}] offline and update broker cluster .", brokerAddress);
+
+            EndPoint node = new EndPoint(zkNodeData.getBrokerId(), brokerAddress);
+
+            endPoints.remove(node);
         }
     }
 
-    /**
-     * Topic Message节点监控
-     *
-     * @apiNote
-     *
-     *  1: Topic下有新消息, 通知Topic下的消费者
-     *
-     * */
+    private class ConsumeMetaPathChildrenCacheListener implements TreeCacheListener {
+
+        @Override
+        public void childEvent(CuratorFramework client, TreeCacheEvent event) throws Exception {
+            TreeCacheEvent.Type type = event.getType();
+            switch (type) {
+                case NODE_ADDED:
+                    consumeNodeChanged(event.getData(), false);
+                    break;
+                case NODE_UPDATED:
+                    consumeNodeChanged(event.getData(), false);
+                    break;
+                case NODE_REMOVED:
+                    consumeNodeChanged(event.getData(), true);
+                    break;
+            }
+        }
+
+        private void consumeNodeChanged(ChildData childData, boolean off) throws Exception {
+            if (childData == null) {
+                return;
+            }
+            String data = new String(childData.getData());
+            ZkConsumeMetaNode metaNode = GsonUtils.fromJson(data, ZkConsumeMetaNode.class);
+            if (metaNode == null) {
+                return;
+            }
+
+            String topic = metaNode.getTopic();
+            String topicGroup = metaNode.getTopicGroup();
+            EndPoint point = new EndPoint(metaNode.getConsumeAddress());
+            Map<String, Set<EndPoint>> groupSubscribe = topicSubscribe.get(topic);
+            if (groupSubscribe == null) {
+                if (off) {
+                    return;
+                }
+                groupSubscribe = Maps.newConcurrentMap();
+                topicSubscribe.put(topic, groupSubscribe);
+            }
+
+            Set<EndPoint> consumePoints = groupSubscribe.get(topicGroup);
+            if (consumePoints == null) {
+                if (off) {
+                    return;
+                }
+                consumePoints = Sets.newConcurrentHashSet();
+                groupSubscribe.put(topicGroup, consumePoints);
+            }
+
+            if (off) {
+                consumePoints.remove(point);
+            } else {
+                consumePoints.add(point);
+            }
+        }
+    }
+
     private class TopicMessagePathChildrenCacheListener implements TreeCacheListener {
 
         @Override
@@ -367,7 +326,6 @@ public class BrokerCluster implements Cluster {
 
         // Topic消息发生变化, 向Broker发送消息请求
         // Note:
-        //  存在问题: 消费组消费位置不统一, 暂时消费组中消费最小位置[浪费网络资源]
         private void topicChangedAndRequest(ChildData childData) throws Exception {
             if (childData == null) {
                 return;
@@ -379,120 +337,49 @@ public class BrokerCluster implements Cluster {
                 if (topicNodeData.getCurrentMsgSequence() <= 0) {
                     return;
                 }
-
-                String topic = topicNodeData.getTopic();
-                Map<String, List<Channel>> consumeClient = topicConsumeClientRecord.get(topic);
-                if (consumeClient == null || consumeClient.isEmpty()) {
-                    return;
-                }
-
-                // Broker发送消息请求
-                InetSocketAddress socketAddress = Utils.stringCastSocketAddress(topicNodeData.getBrokerServer(), ":");
-                BrokerNode brokerNode = new BrokerNode(topicNodeData.getBrokerId(), socketAddress);
-                TransportPool pool = connectors.get(brokerNode);
-                DataTransport transport = pool.borrowObject();
-
-                //
-                long startSequence = getTopicConsumeMinSequence(topicNodeData.getTopic(), topicConsumeRecord);
-                long endSequence = topicNodeData.getCurrentMsgSequence();
-                MsgRequest request = new MsgRequest(topicNodeData.getTopic(), startSequence, endSequence);
-                MQMessage mqMessage = new MQMessage(MQMsgRequest, MQCluster, request);
-                transport.writeAndFlush(mqMessage);
-                pool.returnObject(transport);
             }
-        }
-
-        private long getTopicConsumeMinSequence(String topic, Map<String, Map<String, AtomicLong>> topicConsumeRecord) {
-            if (topicConsumeRecord == null) {
-                return 0L;
-            }
-            Map<String, AtomicLong> consumeRecord = topicConsumeRecord.get(topic);
-            if (consumeRecord == null) {
-                return 0L;
-            }
-
-            long minSequence = Long.MAX_VALUE;
-
-            for (Map.Entry<String, AtomicLong> entry : consumeRecord.entrySet()) {
-                long newMinSequence = entry.getValue().get();
-                if (newMinSequence <= minSequence) {
-                    minSequence = newMinSequence;
-                }
-            }
-
-            return minSequence;
         }
     }
 
-    /**
-     * Broker Server上线/下线监控
-     * */
-    private class BrokerPathChildrenCacheListener implements PathChildrenCacheListener {
-
+    private class ClusterMessageHandler extends ChannelInboundHandlerAdapter {
         @Override
-        public void childEvent(CuratorFramework client, PathChildrenCacheEvent event) throws Exception {
-            PathChildrenCacheEvent.Type type = event.getType();
-            ChildData childData = event.getData();
-            if (childData == null) {
+        public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+            if (msg.getClass() != MQMessage.class) {
+                ctx.fireChannelRead(msg);
                 return;
             }
-            // 处理节点变化
+            MQMessage mqMessage = (MQMessage) msg;
+            MQMsgType type = mqMessage.getMsgType();
             switch (type) {
-                case CHILD_ADDED:
-                    updateBroker(childData);
+                case MQBrokerAllocateRequest:
+                    doBrokerAllocate(ctx, mqMessage);
                     break;
-                case CHILD_UPDATED:
-                    updateBroker(childData);
-                    break;
-                case CHILD_REMOVED:
-                    deleteBroker(childData);
+                case MQTopicStoreRequest:
+                    doTopicStoreAsk(ctx, mqMessage);
                     break;
             }
+
         }
 
-        /**
-         * Broker服务节点更新
-         * */
-        private void updateBroker(ChildData childData) throws Exception {
-            if (childData == null || childData.getData() == null || childData.getData().length == 0) {
-                return;
-            }
-            ZkBrokerNode zkNodeData = GsonUtils.fromJson(new String(childData.getData()), ZkBrokerNode.class);
+        private void doBrokerAllocate(ChannelHandlerContext ctx, MQMessage mqMessage) throws Exception {
+            BrokerAllocateRequest request = (BrokerAllocateRequest) mqMessage.getMsg();
+            EndPoint endPoint = getBrokerNode(request.getTopic());
 
-            LOGGER.info("Broker server node[{}] online .", zkNodeData.getBrokerAddress());
-
-            InetSocketAddress socketAddress = Utils.stringCastSocketAddress(zkNodeData.getBrokerAddress(), ":");
-            BrokerNode node = new BrokerNode(zkNodeData.getBrokerId(), socketAddress);
-            TransportPool pool = connectors.get(node);
-            if (pool == null) {
-                pool = new TransportPool(zkNodeData.getBrokerAddress(), zkConfig.getMqConfig(), new BrokerMsgHandler());
-                connectors.put(node, pool);
-            } else {
-                String address = pool.getBrokerAddress();
-                if (!address.equals(zkNodeData.getBrokerAddress())) {
-                    // Broker Server服务地址 ,l发生变化, 需重新创建连接
-                    pool.destroy();
-                    pool = new TransportPool(zkNodeData.getBrokerAddress(), zkConfig.getMqConfig(), new BrokerMsgHandler());
-                    connectors.put(node, pool);
-                }
-            }
+            // 响应客户端
+            BrokerAllocateResponse response = new BrokerAllocateResponse(endPoint.getPointID(), endPoint.getNodeAddress());
+            MQMessage msg = new MQMessage(MQBrokerAllocateResponse, MQCluster, response);
+            ctx.writeAndFlush(msg);
         }
 
-        /**
-         * Broker服务节点下线
-         * */
-        private void deleteBroker(ChildData childData) {
-            String path = childData.getPath();
-            // Broker唯一标识
-            String UUID = path.substring(ZK_BROKER_PATH.length() + 1);
-            // Broker服务地址
-            String brokerAddress = new String(childData.getData());
+        private void doTopicStoreAsk(ChannelHandlerContext ctx, MQMessage mqMessage) throws Exception {
+            TopicStoreRequest request = (TopicStoreRequest) mqMessage.getMsg();
+            Set<String > endPoints = getTopicStoreNode(request.getTopic());
 
-            LOGGER.info("broker server node[{}] offline .", brokerAddress);
+            // 响应客户端
+            TopicStoreResponse response = new TopicStoreResponse(request.getTopic(), request.getPartition(), endPoints);
+            MQMessage msg = new MQMessage(MQTopicStoreResponse, MQCluster, response);
+            ctx.writeAndFlush(msg);
 
-            InetSocketAddress socketAddress = Utils.stringCastSocketAddress(brokerAddress, ":");
-            BrokerNode node = new BrokerNode(UUID, socketAddress);
-            connectors.remove(node);
         }
     }
 
@@ -502,7 +389,7 @@ public class BrokerCluster implements Cluster {
             try {
                 BrokerCluster.this.destroy();
             } catch (Exception e) {
-                // ignore
+                LOGGER.error("shutdown cluster server exception", e);
             }
         }
     }

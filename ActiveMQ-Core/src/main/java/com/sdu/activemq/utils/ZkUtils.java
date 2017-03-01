@@ -19,7 +19,7 @@ public class ZkUtils {
     }
 
     // Broker Server接收到消息注册节点[/activeMQ/topic/topicName/brokerId]
-    public static String brokerTopicNode(String topic, String brokerAddress) {
+    public static String zkMsgDataNode(String topic, String brokerAddress) {
         return ZK_MSG_DATA_PATH + "/" + topic + "/" + brokerAddress;
     }
 

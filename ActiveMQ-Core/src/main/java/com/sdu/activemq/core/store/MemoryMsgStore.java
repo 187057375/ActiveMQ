@@ -37,15 +37,13 @@ public class MemoryMsgStore implements MsgStore<MsgContent, String> {
     }
 
     @Override
-    public List<String> getMsg(String topic, long startSequence, long endSequence) {
+    public Map<Long, String> getMsg(String topic, long startSequence, long endSequence) {
         SortedMap<Long, String> msgMap = msgDataSource.get(topic);
 
         if (msgMap == null) {
-            return Collections.emptyList();
+            return Collections.emptyMap();
         }
 
-        SortedMap<Long, String> subMap = msgMap.subMap(startSequence, endSequence);
-
-        return subMap.entrySet().stream().map(Map.Entry::getValue).collect(Collectors.toList());
+        return msgMap.subMap(startSequence, endSequence);
     }
 }

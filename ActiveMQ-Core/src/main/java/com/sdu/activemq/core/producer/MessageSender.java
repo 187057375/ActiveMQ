@@ -1,11 +1,8 @@
 package com.sdu.activemq.core.producer;
 
 import com.google.common.collect.Maps;
-import com.sdu.activemq.core.cluster.BrokerNode;
-import com.sdu.activemq.core.cluster.BrokerNodeCluster;
+import com.sdu.activemq.core.cluster.BrokerCluster;
 import com.sdu.activemq.core.disruptor.MessageHandler;
-import com.sdu.activemq.core.transport.DataTransport;
-import com.sdu.activemq.core.transport.TransportPool;
 import com.sdu.activemq.msg.MQMessage;
 import com.sdu.activemq.msg.MQMsgType;
 import com.sdu.activemq.msg.MsgAckImpl;
@@ -30,11 +27,11 @@ public class MessageSender implements MessageHandler {
 
     private Map<String, MQMessage> sendPending;
 
-    private BrokerNodeCluster cluster;
+    private BrokerCluster cluster;
 
     private MessageChannelHandler channelHandler;
 
-    public MessageSender(BrokerNodeCluster cluster) {
+    public MessageSender(BrokerCluster cluster) {
         this.cluster = cluster;
         this.channelHandler = new MessageChannelHandler();
         this.sendPending = Maps.newConcurrentMap();
@@ -48,15 +45,6 @@ public class MessageSender implements MessageHandler {
         MQMessage mqMessage = (MQMessage) msg;
         MsgContent content = (MsgContent) mqMessage.getMsg();
 
-        try {
-            BrokerNode brokerNode = cluster.getBrokerNode(content.getTopic());
-            TransportPool pool = cluster.getTransportPool(brokerNode);
-            DataTransport transport = pool.borrowObject(CHANNEL_HANDLER_NAME, channelHandler);
-            transport.writeAndFlush(msg);
-            pool.returnObject(transport);
-        } catch (Exception e) {
-            LOGGER.error("send msg exception", e);
-        }
     }
 
 

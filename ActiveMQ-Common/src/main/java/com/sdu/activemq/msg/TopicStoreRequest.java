@@ -1,4 +1,4 @@
-package com.sdu.activemq.core.zk.node;
+package com.sdu.activemq.msg;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -12,12 +12,14 @@ import lombok.Setter;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public class ZkConsumeMetaNode {
+public class TopicStoreRequest implements Message {
 
     private String topic;
 
-    private String topicGroup;
+    private int partition;
 
-    private String consumeAddress;
-
+    @Override
+    public String getMsgId() {
+        return null;
+    }
 }

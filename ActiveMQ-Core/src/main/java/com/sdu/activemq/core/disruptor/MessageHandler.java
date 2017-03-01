@@ -6,6 +6,6 @@ package com.sdu.activemq.core.disruptor;
  * */
 public interface MessageHandler {
 
-    public void handle(Object msg);
+    public void handle(Object msg) throws Exception ;
 
 }

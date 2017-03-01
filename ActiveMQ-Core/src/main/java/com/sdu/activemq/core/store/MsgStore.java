@@ -1,6 +1,6 @@
 package com.sdu.activemq.core.store;
 
-import java.util.List;
+import java.util.Map;
 
 /**
  * @author hanhan.zhang
@@ -9,6 +9,6 @@ public interface MsgStore<T, R> {
 
     public void store(T msg);
 
-    public List<R> getMsg(String topic, long startSequence, long endSequence);
+    public Map<Long, R> getMsg(String topic, long startSequence, long endSequence);
 
 }

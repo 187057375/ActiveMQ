@@ -3,6 +3,9 @@ package com.sdu.activemq.msg;
 import com.sdu.activemq.util.Utils;
 import lombok.*;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * @author hanhan.zhang
  * */
@@ -11,15 +14,11 @@ import lombok.*;
 @ToString
 @AllArgsConstructor
 @NoArgsConstructor
-public class MsgRequest implements Message {
+public class MsgConsumeResponse implements Message {
 
     private String topic;
 
-    // 起始序号
-    private long startSequence;
-
-    // 终止序号
-    private long endSequence;
+    private Map<Long, String> messages;
 
     @Override
     public String getMsgId() {

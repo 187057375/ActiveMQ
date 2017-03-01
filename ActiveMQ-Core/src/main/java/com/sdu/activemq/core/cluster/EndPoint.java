@@ -5,8 +5,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.net.InetSocketAddress;
-
 /**
  * @author hanhan.zhang
  * */
@@ -14,11 +12,16 @@ import java.net.InetSocketAddress;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public class BrokerNode {
+public class EndPoint {
 
-    private String brokerID;
+    private String pointID;
 
-    private InetSocketAddress socketAddress;
+    private String nodeAddress;
+
+
+    public EndPoint(String nodeAddress) {
+        this("", nodeAddress);
+    }
 
     @Override
     public boolean equals(Object object) {
@@ -30,14 +33,14 @@ public class BrokerNode {
             return false;
         }
 
-        BrokerNode that = (BrokerNode) object;
+        EndPoint that = (EndPoint) object;
 
-        return socketAddress != null ? socketAddress.equals(that.socketAddress) : that.socketAddress == null;
+        return nodeAddress != null ? nodeAddress.equals(that.nodeAddress) : that.nodeAddress == null;
     }
 
     @Override
     public int hashCode() {
-        int result = socketAddress != null ? socketAddress.hashCode() : 0;
+        int result = nodeAddress != null ? nodeAddress.hashCode() : 0;
         return result;
     }
 }
