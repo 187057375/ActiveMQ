@@ -8,7 +8,6 @@ import com.sdu.activemq.core.zk.ZkClientContext;
 import com.sdu.activemq.core.zk.ZkConfig;
 import com.sdu.activemq.core.zk.node.ZkBrokerNode;
 import com.sdu.activemq.core.zk.node.ZkConsumeMetaNode;
-import com.sdu.activemq.core.zk.node.ZkMsgDataNode;
 import com.sdu.activemq.core.zk.node.ZkMsgTopicNode;
 import com.sdu.activemq.msg.*;
 import com.sdu.activemq.network.serialize.MessageObjectDecoder;
@@ -43,16 +42,31 @@ import static com.sdu.activemq.msg.MQMsgSource.MQCluster;
 import static com.sdu.activemq.msg.MQMsgType.MQBrokerAllocateResponse;
 import static com.sdu.activemq.msg.MQMsgType.MQTopicStoreResponse;
 import static com.sdu.activemq.utils.Const.*;
-import static org.apache.curator.framework.recipes.cache.TreeCacheEvent.Type.NODE_UPDATED;
 
 /**
  * Broker Cluster职责:
  *
- *  1: 监控Broker Server上线/下线
+ *  1: 维护Broker Server节点信息, 用于负载均衡存储消息
  *
- *  2: 消息存储负载均衡
+ *  2: 维护主题消息存储节点映射
  *
- *  3: 监听消息存储节点
+ *  3: 维护主题消息客户端定义信息
+ *
+ * Broker Cluster处理的网络请求:
+ *
+ * 1: Producer申请主题存储节点
+ *
+ * 2: Consumer申请主题消息的Broker的存储节点
+ *
+ * Broker Cluster监控Zk两种节点
+ *
+ * 1: Broker Server节点
+ *
+ *   更新Server节点信息[/activeMQ/broker/host:port]
+ *
+ * 2: Consume Subscribe节点[/activeMQ/consume]
+ *
+ *  更新主题消息客户端定义信息
  *
  * @author hanhan.zhang
  * */
@@ -193,10 +207,8 @@ public class BrokerCluster {
 
         // Broker上线/下线监控
         zkClientContext.addPathListener(ZK_BROKER_PATH, true, new BrokerPathChildrenCacheListener());
-        // 监控消息节点变化
-        zkClientContext.addSubAllPathListener(ZK_MSG_DATA_PATH, new TopicMessagePathChildrenCacheListener());
         // 监控消息订阅节点变化
-        zkClientContext.addSubAllPathListener(ZK_MSG_CONSMUE_PATH, new ConsumeMetaPathChildrenCacheListener());
+        zkClientContext.addSubAllPathListener(ZK_MSG_CONSUME_PATH, new ConsumeMetaPathChildrenCacheListener());
 
     }
 
@@ -310,33 +322,6 @@ public class BrokerCluster {
                 consumePoints.remove(point);
             } else {
                 consumePoints.add(point);
-            }
-        }
-    }
-
-    private class TopicMessagePathChildrenCacheListener implements TreeCacheListener {
-
-        @Override
-        public void childEvent(CuratorFramework client, TreeCacheEvent event) throws Exception {
-            TreeCacheEvent.Type type = event.getType();
-            if (type == NODE_UPDATED) {
-                topicChangedAndRequest(event.getData());
-            }
-        }
-
-        // Topic消息发生变化, 向Broker发送消息请求
-        // Note:
-        private void topicChangedAndRequest(ChildData childData) throws Exception {
-            if (childData == null) {
-                return;
-            }
-            String data = new String(childData.getData());
-            if (Strings.isNotEmpty(data)) {
-                ZkMsgDataNode topicNodeData = GsonUtils.fromJson(data, ZkMsgDataNode.class);
-
-                if (topicNodeData.getCurrentMsgSequence() <= 0) {
-                    return;
-                }
             }
         }
     }

@@ -15,7 +15,7 @@ public class Const {
     public static final String ZK_MSG_DATA_PATH = "/activeMQ/message";
 
     // 主题消息订阅节点路径
-    public static final String ZK_MSG_CONSMUE_PATH = "/activeMQ/consume";
+    public static final String ZK_MSG_CONSUME_PATH = "/activeMQ/consume";
 
     public static final String ZK_MQ_LOCK_PATH = "/activeMQ/lock";
 

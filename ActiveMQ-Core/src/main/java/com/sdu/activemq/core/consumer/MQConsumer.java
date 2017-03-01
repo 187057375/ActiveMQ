@@ -39,6 +39,10 @@ import static org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent.
 
 /**
  *
+ * MQ Consumer
+ *
+ * 1: 尚未做zk节点更新
+ *
  * @author hanhan.zhang
  * */
 public class MQConsumer {
