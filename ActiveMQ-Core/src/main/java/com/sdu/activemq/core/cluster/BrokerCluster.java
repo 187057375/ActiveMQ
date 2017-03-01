@@ -8,6 +8,7 @@ import com.sdu.activemq.core.transport.DataTransport;
 import com.sdu.activemq.core.transport.BrokerTransportPool;
 import com.sdu.activemq.core.zk.ZkClientContext;
 import com.sdu.activemq.core.zk.ZkConfig;
+import com.sdu.activemq.core.zk.node.BrokerZkNode;
 import com.sdu.activemq.msg.*;
 import com.sdu.activemq.network.serialize.MessageObjectDecoder;
 import com.sdu.activemq.network.serialize.MessageObjectEncoder;
@@ -457,7 +458,7 @@ public class BrokerCluster implements Cluster {
             if (childData == null || childData.getData() == null || childData.getData().length == 0) {
                 return;
             }
-            BrokerServer.BrokerZkNodeData zkNodeData = GsonUtils.fromJson(new String(childData.getData()), BrokerServer.BrokerZkNodeData.class);
+            BrokerZkNode zkNodeData = GsonUtils.fromJson(new String(childData.getData()), BrokerZkNode.class);
 
             LOGGER.info("Broker server node[{}] online .", zkNodeData.getBrokerAddress());
 

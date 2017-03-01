@@ -8,6 +8,7 @@ import org.apache.curator.framework.imps.CuratorFrameworkState;
 import org.apache.curator.framework.recipes.cache.*;
 import org.apache.curator.framework.recipes.locks.InterProcessMutex;
 import org.apache.curator.retry.RetryNTimes;
+import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -143,12 +144,16 @@ public class ZkClientContext {
     }
 
     public String createNode(String path, String data) throws Exception {
-       return createNode(path, data.getBytes());
+       return createNode(path, data, CreateMode.EPHEMERAL);
     }
 
-    public String createNode(String path, byte []data) throws Exception {
+    public String createNode(String path, String data, CreateMode mode) throws Exception {
+        return createNode(path, data.getBytes(), mode);
+    }
+
+    public String createNode(String path, byte []data, CreateMode mode) throws Exception {
         valid();
-        return framework.create().creatingParentsIfNeeded().forPath(path, data);
+        return framework.create().creatingParentsIfNeeded().withMode(mode).forPath(path, data);
     }
 
     public void deleteNode(String path) throws Exception {

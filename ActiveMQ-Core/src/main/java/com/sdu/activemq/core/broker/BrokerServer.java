@@ -4,6 +4,7 @@ import com.google.common.collect.Maps;
 import com.sdu.activemq.core.MQConfig;
 import com.sdu.activemq.core.zk.ZkClientContext;
 import com.sdu.activemq.core.zk.ZkConfig;
+import com.sdu.activemq.core.zk.node.BrokerZkNode;
 import com.sdu.activemq.msg.MQMessage;
 import com.sdu.activemq.network.serialize.MessageObjectDecoder;
 import com.sdu.activemq.network.serialize.MessageObjectEncoder;
@@ -19,14 +20,10 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.*;
 
@@ -37,7 +34,7 @@ import java.util.concurrent.*;
  *
  *  2: Zk节点注册/更改
  *
- *      1': Broker Server启动注册节点[/activeMQ/broker/brokerId]
+ *      1': Broker Server启动并创建临时节点[/activeMQ/broker/brokerId]
  *
  *      2': Broker Server消息存储成功更改节点[/activeMQ/topic/topicName/brokerId]
  *
@@ -63,7 +60,6 @@ public class BrokerServer implements Server {
     @Getter
     private ExecutorService executorService;
 
-
     public BrokerServer(MQConfig mqConfig) {
         this.brokerConfig = new BrokerConfig(mqConfig);
         this.zkConfig = new ZkConfig(mqConfig);
@@ -88,7 +84,6 @@ public class BrokerServer implements Server {
         }
         executorService = new ThreadPoolExecutor(poolSize, poolSize, 5, TimeUnit.MINUTES, queue);
 
-        //
         BrokerMessageHandler brokerMessageHandler = new BrokerMessageHandler(this);
 
         // Netty Serve配置
@@ -147,8 +142,8 @@ public class BrokerServer implements Server {
         if (zkClientContext.isServing()) {
             brokerId = Utils.generateUUID();
             String brokerAddress = getServerAddress();
-            BrokerZkNodeData zkNodeData = new BrokerZkNodeData(brokerAddress, brokerId);
-            String path = zkClientContext.createNode(ZkUtils.brokerServerNode(brokerAddress), GsonUtils.toJson(zkNodeData));
+            BrokerZkNode zkNode = new BrokerZkNode(brokerAddress, brokerId);
+            String path = zkClientContext.createNode(ZkUtils.brokerServerNode(brokerAddress), GsonUtils.toJson(zkNode));
             LOGGER.info("broker server create zk node : {}", path);
         }
     }
@@ -185,17 +180,5 @@ public class BrokerServer implements Server {
                 //
             }
         }
-    }
-
-    @Setter
-    @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
-    public static class BrokerZkNodeData {
-
-        private String brokerAddress;
-
-        private String brokerId;
-
     }
 }

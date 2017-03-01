@@ -4,7 +4,6 @@ import com.sdu.activemq.network.utils.NettyUtils;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 
-import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
