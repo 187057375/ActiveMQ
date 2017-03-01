@@ -1,9 +1,7 @@
-package com.sdu.activemq.core.broker;
+package com.sdu.activemq.core.cluster.broker;
 
 import com.sdu.activemq.core.MQConfig;
 import com.sdu.activemq.utils.Utils;
-
-import java.io.IOException;
 
 /**
  * Broker Server配置

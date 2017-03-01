@@ -12,7 +12,7 @@ import lombok.Setter;
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public class BrokerZkNode {
+public class ZkBrokerNode {
 
     // Broker Server服务地址[host:port]
     private String brokerAddress;

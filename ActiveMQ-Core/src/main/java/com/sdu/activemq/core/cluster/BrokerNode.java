@@ -16,7 +16,7 @@ import java.net.InetSocketAddress;
 @NoArgsConstructor
 public class BrokerNode {
 
-    private String brokerUUID;
+    private String brokerID;
 
     private InetSocketAddress socketAddress;
 

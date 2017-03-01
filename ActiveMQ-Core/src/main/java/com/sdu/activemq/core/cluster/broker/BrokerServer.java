@@ -1,10 +1,10 @@
-package com.sdu.activemq.core.broker;
+package com.sdu.activemq.core.cluster.broker;
 
 import com.google.common.collect.Maps;
 import com.sdu.activemq.core.MQConfig;
 import com.sdu.activemq.core.zk.ZkClientContext;
 import com.sdu.activemq.core.zk.ZkConfig;
-import com.sdu.activemq.core.zk.node.BrokerZkNode;
+import com.sdu.activemq.core.zk.node.ZkBrokerNode;
 import com.sdu.activemq.msg.MQMessage;
 import com.sdu.activemq.network.serialize.MessageObjectDecoder;
 import com.sdu.activemq.network.serialize.MessageObjectEncoder;
@@ -142,8 +142,8 @@ public class BrokerServer implements Server {
         if (zkClientContext.isServing()) {
             brokerId = Utils.generateUUID();
             String brokerAddress = getServerAddress();
-            BrokerZkNode zkNode = new BrokerZkNode(brokerAddress, brokerId);
-            String path = zkClientContext.createNode(ZkUtils.brokerServerNode(brokerAddress), GsonUtils.toJson(zkNode));
+            ZkBrokerNode zkNode = new ZkBrokerNode(brokerAddress, brokerId);
+            String path = zkClientContext.createNode(ZkUtils.zkBrokerNode(brokerAddress), GsonUtils.toJson(zkNode));
             LOGGER.info("broker server create zk node : {}", path);
         }
     }
@@ -151,7 +151,7 @@ public class BrokerServer implements Server {
     @Override
     public void shutdown() throws Exception {
         // 删除节点
-        zkClientContext.deleteNode(ZkUtils.brokerServerNode(brokerId));
+        zkClientContext.deleteNode(ZkUtils.zkBrokerNode(brokerId));
 
         if (nettyServer != null) {
             nettyServer.stop(10, TimeUnit.SECONDS);

@@ -1,4 +1,4 @@
-package com.sdu.activemq.core.broker;
+package com.sdu.activemq.core.cluster.broker;
 
 import com.sdu.activemq.msg.MQMessage;
 import io.netty.channel.ChannelHandlerContext;

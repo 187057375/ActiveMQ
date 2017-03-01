@@ -1,4 +1,4 @@
-package com.sdu.activemq.core.broker;
+package com.sdu.activemq.core.cluster.broker;
 
 /**
  * @author hanhan.zhang

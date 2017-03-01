@@ -1,6 +1,8 @@
 package com.sdu.activemq.core.transport;
 
 import com.sdu.activemq.core.MQConfig;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelInboundHandler;
 import org.apache.commons.pool.impl.GenericObjectPool;
 import org.slf4j.Logger;
@@ -15,9 +17,9 @@ import org.slf4j.LoggerFactory;
  *
  * @author hanhan.zhang
  * */
-public class BrokerTransportPool extends GenericObjectPool<DataTransport> {
+public class TransportPool extends GenericObjectPool<DataTransport> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(BrokerTransportPool.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(TransportPool.class);
 
     private static final String BROKER_CONNECT_MAX_ACTIVE = "broker.connect.max.active";
 
@@ -31,7 +33,7 @@ public class BrokerTransportPool extends GenericObjectPool<DataTransport> {
 
     private String brokerAddress;
 
-    public BrokerTransportPool(String brokerAddress, MQConfig mqConfig, ChannelInboundHandler channelHandler) {
+    public TransportPool(String brokerAddress, MQConfig mqConfig) {
         this.brokerAddress = brokerAddress;
         int maxActive = mqConfig.getInt(BROKER_CONNECT_MAX_ACTIVE, 10);
         int minIdle = mqConfig.getInt(BROKER_CONNECT_MIN_IDLE, 5);
@@ -39,7 +41,31 @@ public class BrokerTransportPool extends GenericObjectPool<DataTransport> {
         int maxWait = mqConfig.getInt(BROKER_CONNECT_MAX_AWAIT, 1000);
         int sessionTimeOut = mqConfig.getInt(BROKER_CONNECT_SESSION_TIMEOUT, 5000);
 
-        LOGGER.info("BrokerTransportPool[maxActive={},minIdle={},maxIdle={},maxWait={},sessionTimeOut={}]", maxActive, minIdle, maxIdle, maxWait, sessionTimeOut);
+        LOGGER.info("TransportPool[maxActive={},minIdle={},maxIdle={},maxWait={},sessionTimeOut={}]", maxActive, minIdle, maxIdle, maxWait, sessionTimeOut);
+
+        this.setMaxActive(maxActive);
+        this.setMaxIdle(maxIdle);
+        this.setMinIdle(minIdle);
+        this.setMaxWait(maxWait);
+        this.setTestOnBorrow(false);
+        this.setTestOnReturn(false);
+        this.setTimeBetweenEvictionRunsMillis(10 * 1000);
+        this.setNumTestsPerEvictionRun(maxActive + maxIdle);
+        this.setMinEvictableIdleTimeMillis(30 * 60 * 1000);
+        this.setTestWhileIdle(true);
+
+        this.setFactory(new TransportPoolFactory(brokerAddress, mqConfig));
+    }
+
+    public TransportPool(String brokerAddress, MQConfig mqConfig, ChannelInboundHandler channelHandler) {
+        this.brokerAddress = brokerAddress;
+        int maxActive = mqConfig.getInt(BROKER_CONNECT_MAX_ACTIVE, 10);
+        int minIdle = mqConfig.getInt(BROKER_CONNECT_MIN_IDLE, 5);
+        int maxIdle = mqConfig.getInt(BROKER_CONNECT_MAX_IDLE, 20);
+        int maxWait = mqConfig.getInt(BROKER_CONNECT_MAX_AWAIT, 1000);
+        int sessionTimeOut = mqConfig.getInt(BROKER_CONNECT_SESSION_TIMEOUT, 5000);
+
+        LOGGER.info("TransportPool[maxActive={},minIdle={},maxIdle={},maxWait={},sessionTimeOut={}]", maxActive, minIdle, maxIdle, maxWait, sessionTimeOut);
 
         this.setMaxActive(maxActive);
         this.setMaxIdle(maxIdle);
@@ -61,5 +87,11 @@ public class BrokerTransportPool extends GenericObjectPool<DataTransport> {
 
     public void destroy() throws Exception {
         this.close();
+    }
+
+    public DataTransport borrowObject(String handleName, ChannelHandler channelHandler) throws Exception {
+        DataTransport dataTransport = super.borrowObject();
+        dataTransport.addChannelHandler(handleName, channelHandler);
+        return dataTransport;
     }
 }

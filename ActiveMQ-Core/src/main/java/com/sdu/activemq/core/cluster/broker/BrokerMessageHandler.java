@@ -1,7 +1,8 @@
-package com.sdu.activemq.core.broker;
+package com.sdu.activemq.core.cluster.broker;
 
 import com.google.common.base.Strings;
 import com.sdu.activemq.core.store.MemoryMsgStore;
+import com.sdu.activemq.core.zk.node.ZkMsgDataNode;
 import com.sdu.activemq.msg.*;
 import com.sdu.activemq.utils.GsonUtils;
 import com.sdu.activemq.utils.Utils;
@@ -36,7 +37,7 @@ import static com.sdu.activemq.msg.MQMsgType.MQMsgStoreAck;
  *
  *  2: MQ消息消费
  *
- *  3: Cluster发送的心跳
+ *  3: 客户端发送的心跳
  *
  * @author hanhan.zhang
  * */
@@ -184,7 +185,7 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
 
                     if (!checkExist(path)) {
                         InetSocketAddress socketAddress = brokerServer.getNettyServer().getSocketAddress();
-                        TopicNodeData topicNodeData = new TopicNodeData(message.getTopic(), Utils.socketAddressCastString(socketAddress), brokerId, 0);
+                        ZkMsgDataNode topicNodeData = new ZkMsgDataNode(message.getTopic(), Utils.socketAddressCastString(socketAddress), brokerId, 0);
                         String data = GsonUtils.toJson(topicNodeData);
                         String nodePath = brokerServer.getZkClientContext().createNode(path, data);
                         if (!Strings.isNullOrEmpty(nodePath)) {
@@ -211,7 +212,7 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
             String brokeId = brokerServer.getBrokerId();
             String path = ZkUtils.brokerTopicNode(brokerServer.getServerAddress(), message.getTopic());
             InetSocketAddress socketAddress = brokerServer.getNettyServer().getSocketAddress();
-            TopicNodeData topicNodeData = new TopicNodeData(message.getTopic(), Utils.socketAddressCastString(socketAddress), brokeId, message.getBrokerMsgSequence());
+            ZkMsgDataNode topicNodeData = new ZkMsgDataNode(message.getTopic(), Utils.socketAddressCastString(socketAddress), brokeId, message.getBrokerMsgSequence());
             String data = GsonUtils.toJson(topicNodeData);
             brokerServer.getZkClientContext().updateNodeData(path, data.getBytes());
         }
@@ -259,29 +260,6 @@ public class BrokerMessageHandler extends ChannelInboundHandlerAdapter {
             }
             return result;
         }
-    }
-
-    /**
-     * Topic Zk Node数据存储格式
-     */
-    @Setter
-    @Getter
-    @AllArgsConstructor
-    @NoArgsConstructor
-    public static class TopicNodeData {
-
-        // 主题
-        private String topic;
-
-        // 存储Broker Server服务地址
-        private String brokerServer;
-
-        // Broker Server UUID
-        private String brokerId;
-
-        // 当前Topic最大消息序号
-        private long currentMsgSequence;
-
     }
 
 }

@@ -59,6 +59,16 @@ public class NettyClient {
         return channel.writeAndFlush(object);
     }
 
+    public void addChannelHandler(String handlerName, ChannelHandler channelHandler) {
+        if (channelHandler == null) {
+            throw new IllegalArgumentException("channelHandler is null");
+        }
+        assert isStarted();
+        if (channel.pipeline().get(handlerName) == null) {
+            channel.pipeline().addLast(handlerName, channelHandler);
+        }
+    }
+
     public boolean isStarted() {
         return started.get();
     }

@@ -10,22 +10,26 @@ import org.apache.commons.pool.PoolableObjectFactory;
  * */
 public class TransportPoolFactory implements PoolableObjectFactory<DataTransport> {
 
-    // MQ Broker服务地址
-    private String brokerAddress;
+    // 服务地址
+    private String remoteServerAddress;
 
     private MQConfig mqConfig;
 
     private ChannelInboundHandler channelHandler;
 
-    public TransportPoolFactory(String brokerAddress, MQConfig mqConfig, ChannelInboundHandler channelHandler) {
-        this.brokerAddress = brokerAddress;
+    public TransportPoolFactory(String remoteServerAddress, MQConfig mqConfig) {
+        this(remoteServerAddress, mqConfig, null);
+    }
+
+    public TransportPoolFactory(String remoteServerAddress, MQConfig mqConfig, ChannelInboundHandler channelHandler) {
+        this.remoteServerAddress = remoteServerAddress;
         this.mqConfig = mqConfig;
         this.channelHandler = channelHandler;
     }
 
     @Override
     public DataTransport makeObject() throws Exception {
-        DataTransport connector = new DataTransport(brokerAddress, mqConfig, channelHandler);
+        DataTransport connector = new DataTransport(remoteServerAddress, mqConfig, channelHandler);
         return connector;
     }
 

@@ -2,13 +2,13 @@ package com.sdu.activemq.core.cluster;
 
 import com.google.common.collect.Maps;
 import com.sdu.activemq.core.MQConfig;
-import com.sdu.activemq.core.broker.BrokerMessageHandler;
-import com.sdu.activemq.core.broker.BrokerServer;
+import com.sdu.activemq.core.cluster.broker.BrokerMessageHandler;
 import com.sdu.activemq.core.transport.DataTransport;
-import com.sdu.activemq.core.transport.BrokerTransportPool;
+import com.sdu.activemq.core.transport.TransportPool;
 import com.sdu.activemq.core.zk.ZkClientContext;
 import com.sdu.activemq.core.zk.ZkConfig;
-import com.sdu.activemq.core.zk.node.BrokerZkNode;
+import com.sdu.activemq.core.zk.node.ZkBrokerNode;
+import com.sdu.activemq.core.zk.node.ZkMsgDataNode;
 import com.sdu.activemq.msg.*;
 import com.sdu.activemq.network.serialize.MessageObjectDecoder;
 import com.sdu.activemq.network.serialize.MessageObjectEncoder;
@@ -37,7 +37,7 @@ import static com.sdu.activemq.msg.MQMsgSource.MQCluster;
 import static com.sdu.activemq.msg.MQMsgType.MQMsgRequest;
 import static com.sdu.activemq.msg.MQMsgType.MQSubscribeAck;
 import static com.sdu.activemq.utils.Const.ZK_BROKER_PATH;
-import static com.sdu.activemq.utils.Const.ZK_TOPIC_PATH;
+import static com.sdu.activemq.utils.Const.ZK_MSG_DATA_PATH;
 import static org.apache.curator.framework.recipes.cache.TreeCacheEvent.Type.NODE_UPDATED;
 
 /**
@@ -55,7 +55,7 @@ public class BrokerCluster implements Cluster {
     private static final Logger LOGGER = LoggerFactory.getLogger(BrokerCluster.class);
 
     // Broker链接表[每个Broker拥有一个客户端连接池]
-    private ConcurrentHashMap<BrokerNode, BrokerTransportPool> connectors;
+    private ConcurrentHashMap<BrokerNode, TransportPool> connectors;
 
     // 记录Topic消费序号[key = 消息主题, value = [key = 消费组名, value = 消费位置]]
     private ConcurrentHashMap<String, Map<String, AtomicLong>> topicConsumeRecord;
@@ -95,7 +95,7 @@ public class BrokerCluster implements Cluster {
         // Broker Server上线/下线监控
         zkClientContext.addPathListener(ZK_BROKER_PATH, true, new BrokerPathChildrenCacheListener());
         // Topic Message节点监控
-        zkClientContext.addSubAllPathListener(ZK_TOPIC_PATH, new TopicMessagePathChildrenCacheListener());
+        zkClientContext.addSubAllPathListener(ZK_MSG_DATA_PATH, new TopicMessagePathChildrenCacheListener());
 
         // 启动Server
         startClusterServer();
@@ -258,7 +258,7 @@ public class BrokerCluster implements Cluster {
                 byte []dataByte = zkClientContext.getNodeData(brokerZkPath);
                 String data = new String(dataByte);
                 if (Strings.isNotEmpty(data)) {
-                    BrokerMessageHandler.TopicNodeData topicNodeData = GsonUtils.fromJson(data, BrokerMessageHandler.TopicNodeData.class);
+                    ZkMsgDataNode topicNodeData = GsonUtils.fromJson(data, ZkMsgDataNode.class);
                     brokerNode = new BrokerNode(topicNodeData.getBrokerId(), Utils.stringCastSocketAddress(topicNodeData.getBrokerServer(), ":"));
                 } else {
                     brokerNode = loadBalance();
@@ -266,7 +266,7 @@ public class BrokerCluster implements Cluster {
             }
 
             // 转存主题消息
-            BrokerTransportPool pool = connectors.get(brokerNode);
+            TransportPool pool = connectors.get(brokerNode);
             DataTransport transport = pool.borrowObject();
             transport.writeAndFlush(mqMessage);
             pool.returnObject(transport);
@@ -357,7 +357,6 @@ public class BrokerCluster implements Cluster {
      * */
     private class TopicMessagePathChildrenCacheListener implements TreeCacheListener {
 
-
         @Override
         public void childEvent(CuratorFramework client, TreeCacheEvent event) throws Exception {
             TreeCacheEvent.Type type = event.getType();
@@ -375,7 +374,7 @@ public class BrokerCluster implements Cluster {
             }
             String data = new String(childData.getData());
             if (Strings.isNotEmpty(data)) {
-                BrokerMessageHandler.TopicNodeData topicNodeData = GsonUtils.fromJson(data, BrokerMessageHandler.TopicNodeData.class);
+                ZkMsgDataNode topicNodeData = GsonUtils.fromJson(data, ZkMsgDataNode.class);
 
                 if (topicNodeData.getCurrentMsgSequence() <= 0) {
                     return;
@@ -390,7 +389,7 @@ public class BrokerCluster implements Cluster {
                 // Broker发送消息请求
                 InetSocketAddress socketAddress = Utils.stringCastSocketAddress(topicNodeData.getBrokerServer(), ":");
                 BrokerNode brokerNode = new BrokerNode(topicNodeData.getBrokerId(), socketAddress);
-                BrokerTransportPool pool = connectors.get(brokerNode);
+                TransportPool pool = connectors.get(brokerNode);
                 DataTransport transport = pool.borrowObject();
 
                 //
@@ -458,22 +457,22 @@ public class BrokerCluster implements Cluster {
             if (childData == null || childData.getData() == null || childData.getData().length == 0) {
                 return;
             }
-            BrokerZkNode zkNodeData = GsonUtils.fromJson(new String(childData.getData()), BrokerZkNode.class);
+            ZkBrokerNode zkNodeData = GsonUtils.fromJson(new String(childData.getData()), ZkBrokerNode.class);
 
             LOGGER.info("Broker server node[{}] online .", zkNodeData.getBrokerAddress());
 
             InetSocketAddress socketAddress = Utils.stringCastSocketAddress(zkNodeData.getBrokerAddress(), ":");
             BrokerNode node = new BrokerNode(zkNodeData.getBrokerId(), socketAddress);
-            BrokerTransportPool pool = connectors.get(node);
+            TransportPool pool = connectors.get(node);
             if (pool == null) {
-                pool = new BrokerTransportPool(zkNodeData.getBrokerAddress(), zkConfig.getMqConfig(), new BrokerMsgHandler());
+                pool = new TransportPool(zkNodeData.getBrokerAddress(), zkConfig.getMqConfig(), new BrokerMsgHandler());
                 connectors.put(node, pool);
             } else {
                 String address = pool.getBrokerAddress();
                 if (!address.equals(zkNodeData.getBrokerAddress())) {
                     // Broker Server服务地址 ,l发生变化, 需重新创建连接
                     pool.destroy();
-                    pool = new BrokerTransportPool(zkNodeData.getBrokerAddress(), zkConfig.getMqConfig(), new BrokerMsgHandler());
+                    pool = new TransportPool(zkNodeData.getBrokerAddress(), zkConfig.getMqConfig(), new BrokerMsgHandler());
                     connectors.put(node, pool);
                 }
             }

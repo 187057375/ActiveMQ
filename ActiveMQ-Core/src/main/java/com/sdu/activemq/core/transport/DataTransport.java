@@ -55,6 +55,10 @@ public class DataTransport {
 
     private ChannelInboundHandler messageHandler = null;
 
+    public DataTransport(String remoteServerAddress, MQConfig mqConfig) {
+        this(remoteServerAddress, mqConfig, null);
+    }
+
     public DataTransport(String remoteServerAddress, MQConfig mqConfig, ChannelInboundHandler messageHandler) {
         this.remoteServerAddress = remoteServerAddress;
         this.mqConfig = mqConfig;
@@ -85,7 +89,9 @@ public class DataTransport {
                 ch.pipeline().addLast(new MessageObjectDecoder(serializer));
                 ch.pipeline().addLast(new MessageObjectEncoder(serializer));
                 ch.pipeline().addLast(new HeartBeatHandler());
-                ch.pipeline().addLast(messageHandler);
+                if (messageHandler != null) {
+                    ch.pipeline().addLast(messageHandler);
+                }
             }
         });
 
@@ -97,6 +103,10 @@ public class DataTransport {
         }
     }
 
+    public void addChannelHandler(String handlerName, ChannelHandler channelHandler) {
+        nettyClient.addChannelHandler(handlerName, channelHandler);
+    }
+
     public ChannelFuture writeAndFlush(Object msg) {
         return nettyClient.writeAndFlush(msg);
     }
@@ -106,7 +116,7 @@ public class DataTransport {
             try {
                 nettyClient.stop(10, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
-                LOGGER.error("close message connector exception", e);
+                LOGGER.error("close remote server[{}] connector occur exception", remoteServerAddress, e);
             }
         }
     }
