@@ -1,0 +1,11 @@
+1: ActiveMQ基于Netty 4.x + Zookeeper开发, 运行该服务请先安装ZK
+
+2: 服务启动顺序:
+
+    1': 启动ClusterBootstrap
+
+    2': 启动BrokerBootstrap
+
+    3': 启动MQProducer
+
+    4': 启动MQConsumer
