@@ -115,17 +115,26 @@ public class BrokerCluster {
         endPoints.add(point);
     }
 
+    private boolean isBrokerActive(String brokerAddress, String  brokerId) {
+        EndPoint point = new EndPoint(brokerAddress, brokerId);
+        return endPoints.contains(point);
+    }
+
     private EndPoint getBrokerNode(String topic) throws Exception {
         byte []dataByte = zkClientContext.getNodeData(ZkUtils.zkTopicMetaNode(topic));
         if (dataByte != null) {
             String data = new String(dataByte);
             if (Strings.isNotEmpty(data)) {
                 ZkMsgTopicNode storeNode = GsonUtils.fromJson(data, ZkMsgTopicNode.class);
-                if (storeNode != null) {
+                boolean isActive = isBrokerActive(storeNode.getBrokerAddress(), storeNode.getBrokerId());
+                if (isActive) {
                     EndPoint endPoint = new EndPoint(storeNode.getBrokerId(), storeNode.getBrokerAddress());
                     updateTopicStore(topic, endPoint);
                     return endPoint;
                 }
+
+                // 删除旧数据
+                zkClientContext.deleteNode(ZkUtils.zkTopicMetaNode(topic));
             }
         }
 

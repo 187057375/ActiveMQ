@@ -161,12 +161,17 @@ public class ZkClientContext {
         return framework.create().creatingParentsIfNeeded().withMode(mode).forPath(path, data);
     }
 
-    public void deleteNode(String path) throws Exception {
-        valid();
-        Stat stat = framework.checkExists().forPath(path);
-        if (stat != null) {
-            framework.delete().guaranteed().deletingChildrenIfNeeded().forPath(path);
+    public void deleteNode(String path) {
+        try {
+            valid();
+            Stat stat = framework.checkExists().forPath(path);
+            if (stat != null) {
+                framework.delete().guaranteed().deletingChildrenIfNeeded().forPath(path);
+            }
+        } catch (Exception e) {
+            LOGGER.error("delete zk path {} exception .", path, e);
         }
+
     }
 
     public InterProcessMutex getProcessMutex() {

@@ -104,7 +104,7 @@ public class MQProducer {
         nettyClient.blockUntilStarted(2);
 
         if (nettyClient.isStarted()) {
-            LOGGER.info("transport connect cluster[{}] success .", clusterAddress);
+            LOGGER.info("producer connect cluster[{}] success .", clusterAddress);
             started.set(true);
         }
 
@@ -114,7 +114,7 @@ public class MQProducer {
 
     public void sendMsg(MQMessage mqMessage, boolean rightNow) throws Exception {
         if (!started.get()) {
-            throw new IllegalStateException("Producer is not started");
+            throw new IllegalStateException("producer is not started");
         }
         if (mqMessage.getMsgType() != MQMsgStore) {
             throw new IllegalArgumentException("message type must be MQMsgStore");
@@ -239,6 +239,7 @@ public class MQProducer {
             MsgContent msgContent = new MsgContent("mq.test", "", msg.getBytes(), System.currentTimeMillis());
             MQMessage mqMessage = new MQMessage(MQMsgStore, MQProducer, msgContent);
             producer.sendMsg(mqMessage, true);
+            TimeUnit.SECONDS.sleep(1);
         }
 
     }
