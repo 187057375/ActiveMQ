@@ -26,6 +26,7 @@ import org.apache.logging.log4j.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -39,9 +40,13 @@ import static org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent.
 
 /**
  *
- * MQ Consumer
+ * MQ Consumer职责
  *
- * 1: 尚未做zk节点更新
+ * 1: 请求Cluster主题消息Topic存储的Broker[创建Broker的连接池]
+ *
+ * 2: 监控Zk节点, 向Broker请求主题消息消费
+ *
+ *    /activeMQ/message/topic/host:ip
  *
  * @author hanhan.zhang
  * */
@@ -68,8 +73,8 @@ public class MQConsumer {
 
     private Map<String, AtomicLong> brokerSequence = Maps.newConcurrentMap();
 
-    public MQConsumer(String clusterAddress, String topic, String topicGroup, MQConfig mqConfig) {
-        this.clusterAddress = clusterAddress;
+    public MQConsumer(String topic, String topicGroup, MQConfig mqConfig) {
+        this.clusterAddress = mqConfig.getString("cluster.address", "127.0.0.1:6712");
         this.topic = topic;
         this.topicGroup = topicGroup;
         this.mqConfig = mqConfig;
@@ -79,6 +84,9 @@ public class MQConsumer {
     }
 
     public void start() throws Exception {
+        // 启动Zk
+        zkClientContext.start();
+
         NettyClientConfig clientConfig = new NettyClientConfig();
         clientConfig.setEPool(false);
         clientConfig.setSocketThreads(10);
@@ -109,9 +117,6 @@ public class MQConsumer {
         if (nettyClient.isStarted()) {
             LOGGER.info("transport connect cluster[{}] success .", clusterAddress);
         }
-
-        // 启动Zk
-        zkClientContext.start();
     }
 
     private class ConsumeMessageHandler extends ChannelInboundHandlerAdapter {
@@ -141,7 +146,7 @@ public class MQConsumer {
                             transportPools.put(address, pool);
 
                             // 添加Broker Server数据节点变化
-                            String zkMsgDataPath = ZkUtils.zkMsgDataNode(response.getTopic(), address);
+                            String zkMsgDataPath = ZkUtils.zkMsgDataParentNode(response.getTopic());
                             try {
                                 zkClientContext.addPathListener(zkMsgDataPath, true, new MessageDataPathChildrenCacheListener());
                             } catch (Exception e) {
@@ -164,10 +169,16 @@ public class MQConsumer {
                 return;
             }
 
+            String remoteServer = Utils.socketAddressCastString((InetSocketAddress) ctx.channel().remoteAddress());
+
             MQMessage mqMessage = (MQMessage) msg;
             if (mqMessage.getMsgType() == MQConsumeResponse) {
                 MsgConsumeResponse response = (MsgConsumeResponse) mqMessage.getMsg();
-                LOGGER.info("consume message : {}", response.getMessages());
+                LOGGER.info("consume message : {}", GsonUtils.toPrettyJson(response.getMessages()));
+                AtomicLong sequence = brokerSequence.get(remoteServer);
+                if (sequence != null) {
+                    sequence.set(response.getEndSequence());
+                }
             }
 
         }
@@ -211,8 +222,6 @@ public class MQConsumer {
                     return;
                 }
 
-                sequence.set(topicNodeData.getCurrentMsgSequence());
-
                 LOGGER.info("consume broker[{}] message from {} to {} .", brokerServer, sequence.get(), topicNodeData.getCurrentMsgSequence());
 
                 // Broker发送消息请求
@@ -224,5 +233,12 @@ public class MQConsumer {
                 pool.returnObject(transport);
             }
         }
+    }
+
+    public static void main(String[] args) throws Exception {
+        String topic = "mq.test";
+        String topicGroup = "mq.test.group";
+        MQConsumer consumer = new MQConsumer(topic, topicGroup, new MQConfig("consumer.cfg"));
+        consumer.start();
     }
 }

@@ -12,11 +12,13 @@ public enum MQMsgType {
     MQConsumeResponse(2, "消息消费请求响应"),
     MQMsgStore(3, "消息存储"),
     MQMsgStoreAck(4, "消息存储确认"),
-    MQHeartBeatAck(5, "心跳确认"),
-    MQBrokerAllocateRequest(6, "Broker分配请求"),
-    MQBrokerAllocateResponse(8, "Broker分配请求响应"),
-    MQTopicStoreRequest(8, "主题存储询问请求"),
-    MQTopicStoreResponse(9, "主题存储询问请求响应");
+    MQMsgBatchStore(5, "批量消息存储"),
+    MQMsgBatchStoreAck(6, "批量消息存储确认"),
+    MQHeartBeatAck(7, "心跳确认"),
+    MQBrokerAllocateRequest(8, "Broker分配请求"),
+    MQBrokerAllocateResponse(9, "Broker分配请求响应"),
+    MQTopicStoreRequest(10, "主题存储询问请求"),
+    MQTopicStoreResponse(11, "主题存储询问请求响应");
 
     int messageType;
 

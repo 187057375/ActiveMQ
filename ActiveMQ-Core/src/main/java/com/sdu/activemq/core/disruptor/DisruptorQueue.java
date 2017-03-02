@@ -1,5 +1,6 @@
 package com.sdu.activemq.core.disruptor;
 
+import com.google.common.collect.Lists;
 import com.lmax.disruptor.*;
 import com.lmax.disruptor.TimeoutException;
 import com.lmax.disruptor.dsl.ProducerType;
@@ -9,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
@@ -68,11 +70,11 @@ public class DisruptorQueue {
     // flush thread pool executor
     private ScheduledExecutorService flushExecutor;
 
-    private EventHandlerImpl eventHandler;
+    private MessageHandler eventHandler;
 
     public DisruptorQueue(ProducerType type, MessageHandler messageHandler, MQConfig mqConfig) {
         this.queueName = PREFIX + mqConfig.getString(MQ_DISRUPTOR_QUEUE_NAME, "msg-queue");
-        this.eventHandler = new EventHandlerImpl(messageHandler);
+        this.eventHandler = messageHandler;
         this.inputBatchSize = mqConfig.getInt(MQ_DISRUPTOR_CACHE_SIZE, 128);
 
         WaitStrategy waitStrategy;
@@ -94,7 +96,7 @@ public class DisruptorQueue {
 
 
         // 定时剔除投递到RingBuffer中的事件
-        int flushInterval = mqConfig.getInt(MQ_DISRUPTOR_CACHE_FLUSH_INTERVAL, 1);
+        int flushInterval = mqConfig.getInt(MQ_DISRUPTOR_CACHE_FLUSH_INTERVAL, 1000);
         this.flushExecutor = Executors.newScheduledThreadPool(mqConfig.getInt(MQ_DISRUPTOR_CACHE_FLUSH_THREAD, 1));
         this.flushExecutor.scheduleWithFixedDelay(() ->
             threadBatch.forEach((threadId, threadLocalInsert) -> {
@@ -104,13 +106,13 @@ public class DisruptorQueue {
     }
 
     // consume
-    private void consumeBatch(EventHandler<Object> eventHandler) {
+    private void consumeBatch(MessageHandler messageHandler) {
         try {
             final long nextSequence = this.consume.get() + 1;
             final long availableSequence = this.barrier.waitFor(nextSequence);
 
             if (availableSequence > nextSequence) {
-                this.consumeBatchToCursor(availableSequence, eventHandler);
+                this.consumeBatchToCursor(availableSequence, messageHandler);
             }
         } catch (AlertException e) {
             LOGGER.error("disruptor queue occur alter exception", e);
@@ -121,16 +123,17 @@ public class DisruptorQueue {
         }
     }
 
-    private void consumeBatchToCursor(long cursor, EventHandler<Object> eventHandler) {
+    private void consumeBatchToCursor(long cursor, MessageHandler messageHandler) {
+        List<Object> batchMsg = Lists.newLinkedList();
         for (long cur = this.consume.get() + 1; cur <= cursor ; ++cur) {
             AtomicReference<Object> atomicReference = this.buffer.get(cur);
-            try {
-                eventHandler.onEvent(atomicReference.get(), cur, cur == cursor);
-            } catch (Exception e) {
-                LOGGER.error("disruptor queue consumer event occur exception !", e);
-            } finally {
-                this.consume.set(cur);
-            }
+            batchMsg.add(atomicReference.get());
+            this.consume.set(cur);
+        }
+        try {
+            messageHandler.handle(batchMsg);
+        } catch (Exception e) {
+            LOGGER.error("disruptor queue consumer event occur exception !", e);
         }
     }
 
@@ -173,19 +176,19 @@ public class DisruptorQueue {
         }
     }
 
-    private class EventHandlerImpl implements EventHandler {
-
-        private MessageHandler messageHandler;
-
-        EventHandlerImpl(MessageHandler messageHandler) {
-            this.messageHandler = messageHandler;
-        }
-
-        @Override
-        public void onEvent(Object object, long l, boolean b) throws Exception {
-            messageHandler.handle(object);
-        }
-    }
+//    private class EventHandlerImpl implements EventHandler {
+//
+//        private MessageHandler messageHandler;
+//
+//        EventHandlerImpl(MessageHandler messageHandler) {
+//            this.messageHandler = messageHandler;
+//        }
+//
+//        @Override
+//        public void onEvent(Object object, long l, boolean b) throws Exception {
+//            messageHandler.handle(object);
+//        }
+//    }
 
     private interface ThreadLocalInsert {
         public void add(Object obj);

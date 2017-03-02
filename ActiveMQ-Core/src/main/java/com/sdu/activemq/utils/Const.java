@@ -11,7 +11,7 @@ public class Const {
     // 主题消息注册节点路径
     public static final String ZK_TOPIC_META_PATH = "/activeMQ/topic";
 
-    // 主题消息存储节点路径
+    // 主题消息存储Broker节点路径
     public static final String ZK_MSG_DATA_PATH = "/activeMQ/message";
 
     // 主题消息订阅节点路径

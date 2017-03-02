@@ -15,11 +15,13 @@ import com.sdu.activemq.network.serialize.MessageObjectDecoder;
 import com.sdu.activemq.network.serialize.MessageObjectEncoder;
 import com.sdu.activemq.network.serialize.kryo.KryoSerializer;
 import com.sdu.activemq.util.Utils;
+import com.sdu.activemq.utils.GsonUtils;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -33,6 +35,18 @@ import static com.sdu.activemq.msg.MQMsgType.MQMsgStore;
 import static com.sdu.activemq.msg.MQMsgType.MQMsgStoreAck;
 
 /**
+ * MQ消息生产者职责:
+ *
+ * 1: 请求Cluster为主题Topic分配Broker
+ *
+ * 2: 对分配的Broker的主题Topic创建Broker连接池
+ *
+ * MQ消息发送有两种方式:
+ *
+ * 1: 立即发送
+ *
+ * 2: 批量发送[暂时有问题]
+ *
  * @author hanhan.zhang
  * */
 public class MQProducer {
@@ -105,7 +119,6 @@ public class MQProducer {
 
         if (nettyClient.isStarted()) {
             LOGGER.info("producer connect cluster[{}] success .", clusterAddress);
-            started.set(true);
         }
 
         Runtime.getRuntime().addShutdownHook(new ShutdownHook());
@@ -119,7 +132,7 @@ public class MQProducer {
         if (mqMessage.getMsgType() != MQMsgStore) {
             throw new IllegalArgumentException("message type must be MQMsgStore");
         }
-        MsgContent content = (MsgContent) mqMessage.getMsg();
+        MsgStoreRequest content = (MsgStoreRequest) mqMessage.getMsg();
         if (content.getTopic() == null || !content.getTopic().equals(this.topic)) {
             throw new IllegalArgumentException("message topic must be " + topic);
         }
@@ -157,7 +170,7 @@ public class MQProducer {
             }
 
             MQMessage mqMessage = (MQMessage) msg;
-            MsgContent content = (MsgContent) mqMessage.getMsg();
+            MsgStoreRequest content = (MsgStoreRequest) mqMessage.getMsg();
 
             // 负责均衡[未做]
             TransportPool pool = Lists.newArrayList(brokerConnectPool.values()).get(0);
@@ -169,6 +182,22 @@ public class MQProducer {
             DataTransport transport = pool.borrowObject();
             transport.writeAndFlush(mqMessage);
             pool.returnObject(transport);
+        }
+
+        @Override
+        public void handle(List<Object> batchMsg) throws Exception {
+            if (batchMsg == null || batchMsg.isEmpty()) {
+                return;
+            }
+
+
+            for (Object msg : batchMsg) {
+                if (msg.getClass() != MQMessage.class) {
+                    continue;
+                }
+                handle(msg);
+            }
+
         }
     }
 
@@ -190,11 +219,11 @@ public class MQProducer {
             MQMessage mqMessage = (MQMessage) msg;
             final BrokerAllocateResponse response = (BrokerAllocateResponse) mqMessage.getMsg();
 
-            TransportPool pool = new TransportPool(response.getBrokerAddress(), mqConfig, new MessageStoreHandler());
-            brokerConnectPool.put(response.getBrokerAddress(), pool);
-//            executorService.submit(() -> {
-//
-//            });
+            executorService.submit(() -> {
+                TransportPool pool = new TransportPool(response.getBrokerAddress(), mqConfig, new MessageStoreHandler());
+                brokerConnectPool.put(response.getBrokerAddress(), pool);
+                started.set(true);
+            });
         }
     }
 
@@ -212,8 +241,7 @@ public class MQProducer {
             MQMsgType type = mqMessage.getMsgType();
             if (type == MQMsgStoreAck) {
                 MsgAckImpl msgAck = (MsgAckImpl) mqMessage.getMsg();
-                LOGGER.info("message store ack : topic = {}, msgId = {}, brokerSequence = {}, status = {}",
-                        msgAck.getTopic(), msgAck.getMsgId(), msgAck.getBrokerMsgSequence(), msgAck.getAckStatus());
+                LOGGER.info("message store ack : {} ", GsonUtils.toPrettyJson(msgAck));
             }
         }
     }
@@ -236,8 +264,8 @@ public class MQProducer {
 
         while (true) {
             String msg = UUID.randomUUID().toString();
-            MsgContent msgContent = new MsgContent("mq.test", "", msg.getBytes(), System.currentTimeMillis());
-            MQMessage mqMessage = new MQMessage(MQMsgStore, MQProducer, msgContent);
+            MsgStoreRequest msgStoreRequest = new MsgStoreRequest("mq.test", "", msg, System.currentTimeMillis());
+            MQMessage mqMessage = new MQMessage(MQMsgStore, MQProducer, msgStoreRequest);
             producer.sendMsg(mqMessage, true);
             TimeUnit.SECONDS.sleep(1);
         }

@@ -4,23 +4,32 @@ import com.sdu.activemq.util.Utils;
 import lombok.*;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * @author hanhan.zhang
  * */
 @Setter
 @Getter
-@ToString
 @AllArgsConstructor
 @NoArgsConstructor
-public class MsgConsumeResponse implements Message {
+@ToString
+public class MsgBatchStoreRequest implements Message {
 
+    // 消息主题
     private String topic;
 
-    private long endSequence;
+    //
+    private String producerAddress;
 
-    private Map<Long, String> messages;
+    // 消息体
+    private List<String> msgBody;
+
+    // 消息产生时间戳
+    private long timestamp;
+
+    // Broker Server产生的序号
+    private long brokerMsgSequence;
+
 
     @Override
     public String getMsgId() {

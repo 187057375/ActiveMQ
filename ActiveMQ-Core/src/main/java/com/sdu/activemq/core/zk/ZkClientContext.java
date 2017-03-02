@@ -9,7 +9,6 @@ import org.apache.curator.framework.recipes.cache.*;
 import org.apache.curator.framework.recipes.locks.InterProcessMutex;
 import org.apache.curator.retry.RetryNTimes;
 import org.apache.zookeeper.CreateMode;
-import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,11 +38,14 @@ public class ZkClientContext {
     // 分布式锁
     private InterProcessMutex processMutex;
 
-    // 节点监听
+    // 子节点监听
     private List<PathChildrenCache> watchers;
 
     // 所有子节点监听
     private List<TreeCache> treeWatchers;
+
+    // 节点数据监听
+    private List<NodeCache> nodeWatchers;
 
     public ZkClientContext(ZkConfig config) {
         this.config = config;
@@ -70,6 +72,7 @@ public class ZkClientContext {
 
         watchers = Lists.newLinkedList();
         treeWatchers = Lists.newLinkedList();
+        nodeWatchers = Lists.newLinkedList();
     }
 
     public boolean isServing() {
@@ -90,7 +93,11 @@ public class ZkClientContext {
         }
 
         if (treeWatchers != null) {
-            for (TreeCache watcher : treeWatchers) {
+            treeWatchers.forEach(TreeCache::close);
+        }
+
+        if (nodeWatchers != null) {
+            for (NodeCache watcher : nodeWatchers) {
                 watcher.close();
             }
         }
@@ -105,6 +112,7 @@ public class ZkClientContext {
         watchers.add(watcher);
     }
 
+    // 对所有子节点监控
     public void addSubAllPathListener(String path, TreeCacheListener listener) throws Exception {
         valid();
         TreeCache treeCache = new TreeCache(framework, path);
@@ -113,10 +121,24 @@ public class ZkClientContext {
         treeWatchers.add(treeCache);
     }
 
+    public NodeCache addNodeListener(String path, NodeCacheListener listener) throws Exception {
+        valid();
+        NodeCache nodeCache = new NodeCache(framework, path);
+        nodeCache.getListenable().addListener(listener);
+        nodeCache.start();
+        nodeWatchers.add(nodeCache);
+        return nodeCache;
+    }
+
     public void updateNodeData(String path, byte[] data) {
         valid();
         try {
-            framework.setData().forPath(path, data);
+            if (isNodeExist(path)) {
+                framework.setData().forPath(path, data);
+            } else {
+                createNode(path, data, CreateMode.EPHEMERAL);
+            }
+
         } catch (Exception e) {
             LOGGER.error("Update zk node[{}] data exception", path, e);
         }

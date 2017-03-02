@@ -11,7 +11,7 @@ import lombok.*;
 @AllArgsConstructor
 @NoArgsConstructor
 @ToString
-public class MsgContent implements Message {
+public class MsgStoreRequest implements Message {
 
     // 消息主题
     private String topic;
@@ -20,7 +20,7 @@ public class MsgContent implements Message {
     private String producerAddress;
 
     // 消息体
-    private byte[] msgBody;
+    private String msgBody;
 
     // 消息产生时间戳
     private long timestamp;
@@ -28,7 +28,7 @@ public class MsgContent implements Message {
     // Broker Server产生的序号
     private long brokerMsgSequence;
 
-    public MsgContent(String topic, String producerAddress, byte[] msgBody, long timestamp) {
+    public MsgStoreRequest(String topic, String producerAddress, String msgBody, long timestamp) {
         this(topic, producerAddress, msgBody, timestamp, 0L);
     }
 

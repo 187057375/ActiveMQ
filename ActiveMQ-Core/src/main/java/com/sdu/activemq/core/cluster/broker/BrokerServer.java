@@ -30,13 +30,30 @@ import java.util.concurrent.*;
 /**
  * Broker Server职责
  *
- *  1: MQ消息存储
+ *  1: 负责消息存储
  *
- *  2: Zk节点注册/更改
+ *  2: 负责消息读取并传送给客户端进行消费
  *
- *      1': Broker Server启动并创建临时节点[/activeMQ/broker/brokerId]
+ * Broker Server创建三种zk节点
  *
- *      2': Broker Server消息存储成功更改节点[/activeMQ/topic/topicName/brokerId]
+ *  1: 启动创建zk节点, 下线删除节点
+ *
+ *     /activeMQ/broker/host:port[Cluster会监控该节点, 实时更新Broker节点信息]
+ *
+ *  2: 主题消息存储Broker信息节点
+ *
+ *    /activeMQ/topic/host:port
+ *
+ *    Note:
+ *
+ *      1'：主题消息分配Broker由Cluster路由决定, 而该节点监控在BrokerServer端
+ *
+ *      2'：Cluster为主题消息路由Broker时, 会先查Topic是否已分配且Broker是否存活
+ *
+ *  3: 主题消息当前最大序号节点
+ *
+ *     /activeMQ/message/topic/host:ip[Consumer会监控该节点, 实时消费消息]
+ *
  *
  * @author hanhan.zhang
  * */

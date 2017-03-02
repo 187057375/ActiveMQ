@@ -1,16 +1,16 @@
 package com.sdu.activemq.core.store;
 
-import com.sdu.activemq.msg.MsgContent;
+import com.google.common.collect.Maps;
+import com.sdu.activemq.msg.MsgStoreRequest;
 import org.apache.logging.log4j.util.Strings;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * @author hanhan.zhang
  * */
-public class MemoryMsgStore implements MsgStore<MsgContent, String> {
+public class MemoryMsgStore implements MsgStore<MsgStoreRequest, String> {
 
     // 消息存储使用TreeMap, 根据key快速获取数据
     private ConcurrentHashMap<String, SortedMap<Long, String>> msgDataSource;
@@ -20,7 +20,7 @@ public class MemoryMsgStore implements MsgStore<MsgContent, String> {
     }
 
     @Override
-    public void store(MsgContent msg) {
+    public void store(MsgStoreRequest msg) {
         String topic = msg.getTopic();
         if (Strings.isEmpty(topic)) {
             return;
@@ -31,7 +31,7 @@ public class MemoryMsgStore implements MsgStore<MsgContent, String> {
             msgData = Collections.synchronizedSortedMap(new TreeMap<>());
         }
 
-        String content = new String(msg.getMsgBody());
+        String content = msg.getMsgBody();
         msgData.put(msg.getBrokerMsgSequence(), content);
         msgDataSource.put(topic, msgData);
     }
@@ -44,6 +44,10 @@ public class MemoryMsgStore implements MsgStore<MsgContent, String> {
             return Collections.emptyMap();
         }
 
-        return msgMap.subMap(startSequence, endSequence);
+        // Kryo序列化对象必须要求有无参构造函数
+        Map<Long, String> map = Maps.newHashMap();
+        map.putAll(msgMap.subMap(startSequence, endSequence));
+
+        return map;
     }
 }

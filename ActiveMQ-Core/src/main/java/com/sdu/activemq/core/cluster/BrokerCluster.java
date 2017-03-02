@@ -144,10 +144,6 @@ public class BrokerCluster {
         EndPoint endPoint = shuffleEndPoints.get(0);
         updateTopicStore(topic, endPoint);
 
-        // 创建ZK Store节点
-        ZkMsgTopicNode storeNode = new ZkMsgTopicNode(endPoint.getNodeAddress(), endPoint.getPointID(), topic);
-        zkClientContext.createNode(ZkUtils.zkTopicMetaNode(topic), GsonUtils.toJson(storeNode), CreateMode.PERSISTENT);
-
         return endPoint;
     }
 
